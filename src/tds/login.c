@@ -1382,6 +1382,8 @@ tds71_do_login(TDSSOCKET * tds, TDSLOGIN* login)
 #if ENABLE_ODBC_MARS
 			login->mars = p[off];
 #endif
+		} else if (type == 0 && len >= 4) {
+			tdsdump_log(TDS_DBG_INFO1, "detected server version %d.%d.%d\n", p[off], p[off + 1], (p[off + 2] << 8) | p[off + 3]);
 		}
 	}
 	/* we readed all packet */
