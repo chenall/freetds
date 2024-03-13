@@ -76,6 +76,7 @@ typedef struct pd
 	int pflag;
 	int Eflag;
 	int vflag;
+	int Fflag;
 } BCPPARAMDATA;
 
 static void pusage(void);
@@ -125,7 +126,7 @@ main(int argc, char **argv)
 		}
 	}
 
-	if (check_table_structures(params.src.dbobject, params.dest.dbobject, dbsrc, dbtarget) == FALSE) {
+	if (params.Fflag == 0 && check_table_structures(params.src.dbobject, params.dest.dbobject, dbsrc, dbtarget) == FALSE) {
 		fprintf(stderr, "datacopy: table structures do not match. terminating\n");
 		dbclose(dbsrc);
 		dbclose(dbtarget);
@@ -214,7 +215,7 @@ process_parameters(int argc, char **argv, BCPPARAMDATA * pdata)
 
 	/* get the rest of the arguments */
 
-	while ((opt = getopt(argc, argv, "b:p:tac:dS:D:T:Ev")) != -1) {
+	while ((opt = getopt(argc, argv, "b:p:tac:dS:D:T:Ev:f")) != -1) {
 		switch (opt) {
 		case 'b':
 			pdata->bflag++;
@@ -264,6 +265,9 @@ process_parameters(int argc, char **argv, BCPPARAMDATA * pdata)
 		case 'v':
 			pdata->vflag++;
 			break;
+		case 'f':
+			pdata->Fflag++;
+				break;
 		default:
 			return FALSE;
 		}
