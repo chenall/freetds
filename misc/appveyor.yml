@@ -32,13 +32,13 @@ environment:
   - PLAT: Win64
     WIDTH: 64
     VS_VERSION: "2019"
-    TDSVER: "7.3"
+    TDSVER: "7.4"
     APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2019
 
   - PLAT: Win32
     WIDTH: 32
     VS_VERSION: "2017"
-    TDSVER: "7.2"
+    TDSVER: "7.3"
     APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2017
     ODBC_MARS: "1"
 
@@ -131,7 +131,6 @@ test_script:
   - "powershell misc\\sql-server-activate-tcp-fixed-port.ps1"
   # Create freetds.conf
   # Create a test database
-  - sqlcmd -S localhost -U sa -P Password12! -Q "CREATE DATABASE freetds_test"
   - cd build_debug
   - echo [global]> freetds.conf.local
   - echo port = 1433>> freetds.conf.local

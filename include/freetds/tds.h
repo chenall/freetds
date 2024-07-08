@@ -337,7 +337,8 @@ typedef enum tds_encryption_level {
 	TDS_ENCRYPTION_DEFAULT,
 	TDS_ENCRYPTION_OFF,
 	TDS_ENCRYPTION_REQUEST,
-	TDS_ENCRYPTION_REQUIRE
+	TDS_ENCRYPTION_REQUIRE,
+	TDS_ENCRYPTION_STRICT
 } TDS_ENCRYPTION_LEVEL;
 
 /*
@@ -467,6 +468,7 @@ is_tds_type_valid(int type)
 #define TDS_STR_ENCRYPTION_OFF	 "off"
 #define TDS_STR_ENCRYPTION_REQUEST "request"
 #define TDS_STR_ENCRYPTION_REQUIRE "require"
+#define TDS_STR_ENCRYPTION_STRICT "strict"
 /* Defines to enable optional GSSAPI delegation */
 #define TDS_GSSAPI_DELEGATION "enable gssapi delegation"
 /* Mutual authentication */
@@ -1407,7 +1409,7 @@ bool tds_set_server(TDSLOGIN * tds_login, const char *server) TDS_WUR;
 bool tds_set_client_charset(TDSLOGIN * tds_login, const char *charset) TDS_WUR;
 bool tds_set_language(TDSLOGIN * tds_login, const char *language) TDS_WUR;
 void tds_set_version(TDSLOGIN * tds_login, TDS_TINYINT major_ver, TDS_TINYINT minor_ver);
-int tds_connect_and_login(TDSSOCKET * tds, TDSLOGIN * login);
+TDSRET tds_connect_and_login(TDSSOCKET * tds, TDSLOGIN * login);
 
 
 /* query.c */
@@ -1522,7 +1524,6 @@ int tdserror (const TDSCONTEXT * tds_ctx, TDSSOCKET * tds, int msgno, int errnum
 TDS_STATE tds_set_state(TDSSOCKET * tds, TDS_STATE state);
 void tds_swap_bytes(void *buf, int bytes);
 unsigned int tds_gettime_ms(void);
-char *tds_strndup(const void *s, TDS_INTPTR len);
 
 
 /* log.c */

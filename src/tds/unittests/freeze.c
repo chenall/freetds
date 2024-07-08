@@ -30,6 +30,7 @@
 #endif /* HAVE_UNISTD_H */
 
 #include <freetds/replacements.h>
+#include <freetds/utils.h>
 
 #ifdef _WIN32
 #define SHUT_WR SD_SEND
@@ -128,7 +129,7 @@ strip_headers(buffer *buf)
 			assert(end - p >= 8); /* to read SMP part */
 			len = TDS_GET_UA4LE(p+4);
 			assert(len >= 16);
-			assert(end - p >= len);
+			assert(p + len <= end);
 			p += 16;
 			len -= 16;
 			assert(end - p >= 4); /* to read TDS header part */
@@ -138,7 +139,7 @@ strip_headers(buffer *buf)
 			len = TDS_GET_UA2BE(p+2);
 		}
 		assert(len > 8);
-		assert(end - p >= len);
+		assert(p + len <= end);
 		final = p[1];
 		memmove(dst, p + 8, len - 8);
 		dst += len - 8;
@@ -418,6 +419,7 @@ test(int mars, void (*real_test)(void))
 
 	/* provide connection to a fake remove server */
 	assert(socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) >= 0);
+	tds_socket_set_nosigpipe(sockets[0], 1);
 	was_shutdown = false;
 	tds->state = TDS_IDLE;
 	tds_set_s(tds, sockets[0]);

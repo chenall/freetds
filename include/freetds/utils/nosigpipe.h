@@ -1,5 +1,5 @@
 /* FreeTDS - Library of routines accessing Sybase and Microsoft databases
- * Copyright (C) 2016 Frediano Ziglio
+ * Copyright (C) 2024  Ziglio Frediano
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -17,39 +17,21 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#ifndef _freetds_utils_h_
-#define _freetds_utils_h_
+#ifndef _tds_utils_nosigpipe_h_
+#define _tds_utils_nosigpipe_h_
 
-#if HAVE_STDDEF_H
-#include <stddef.h>
-#endif /* HAVE_STDDEF_H */
+#if HAVE_SYS_TYPES_H
+#include <sys/types.h>
+#endif /* HAVE_SYS_TYPES_H */
 
-#include <freetds/time.h>
-#include <freetds/sysdep_private.h>
+#if HAVE_SYS_SOCKET_H
+#include <sys/socket.h>
+#endif /* HAVE_SYS_SOCKET_H */
 
-#include <freetds/pushvis.h>
-
-#ifdef __cplusplus
-extern "C" {
+#if (!defined(__APPLE__) && !defined(__FreeBSD__) && !defined(__FreeBSD) \
+     && !defined(__NetBSD__) && !defined(__NetBSD)) \
+	|| defined(__SYMBIAN32__)
+#undef SO_NOSIGPIPE
 #endif
 
-void tds_sleep_s(unsigned sec);
-void tds_sleep_ms(unsigned ms);
-
-char *tds_getpassarg(char *arg);
-
-char *tds_timestamp_str(char *str, int maxlen);
-struct tm *tds_localtime_r(const time_t *timep, struct tm *result);
-int tds_getservice(const char *name);
-
-int tds_socket_set_nosigpipe(TDS_SYS_SOCKET sock, int on);
-
-char *tds_strndup(const void *s, TDS_INTPTR len);
-
-#ifdef __cplusplus
-}
-#endif
-
-#include <freetds/popvis.h>
-
-#endif
+#endif /* _tds_utils_nosigpipe_h_ */

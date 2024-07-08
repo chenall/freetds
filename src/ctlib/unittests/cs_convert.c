@@ -9,6 +9,12 @@
 #include <ctpublic.h>
 #include "common.h"
 
+#ifdef CS_TDS_74
+#  define FREETDS 1
+#else
+#  define FREETDS 0
+#endif
+
 static CS_CONTEXT *ctx;
 static int allSuccess = 1;
 
@@ -161,10 +167,12 @@ main(void)
 		CS_SMALLINT test2 = -32768,
 		CS_INT_TYPE, &test, sizeof(test), CS_SMALLINT_TYPE, sizeof(test2), CS_SUCCEED, &test2, sizeof(test2));
 	/* overflow */
+#if FREETDS
 	DO_TEST(CS_INT test = 32768;
 		CS_SMALLINT test2 = 12345, CS_INT_TYPE, &test, sizeof(test), CS_SMALLINT_TYPE, sizeof(test2), CS_FAIL, NULL, 0);
 	DO_TEST(CS_INT test = -32769;
 		CS_SMALLINT test2 = 12345, CS_INT_TYPE, &test, sizeof(test), CS_SMALLINT_TYPE, sizeof(test2), CS_FAIL, NULL, 0);
+#endif
 
 	/* biggest and smallest TINYINT */
 	DO_TEST(CS_INT test = 255;
@@ -174,10 +182,12 @@ main(void)
 		CS_TINYINT test2 = 0,
 		CS_INT_TYPE, &test, sizeof(test), CS_TINYINT_TYPE, sizeof(test2), CS_SUCCEED, &test2, sizeof(test2));
 	/* overflow */
+#if FREETDS
 	DO_TEST(CS_INT test = 256;
 		CS_TINYINT test2 = 1, CS_INT_TYPE, &test, sizeof(test), CS_TINYINT_TYPE, sizeof(test2), CS_FAIL, NULL, 0);
 	DO_TEST(CS_INT test = -1;
 		CS_TINYINT test2 = 1, CS_INT_TYPE, &test, sizeof(test), CS_TINYINT_TYPE, sizeof(test2), CS_FAIL, NULL, 0);
+#endif
 
 	/* biggest and smallest BIT */
 	DO_TEST(CS_INT test = 1;
@@ -204,9 +214,11 @@ main(void)
 		CS_FLOAT test2 = -8765.0,
 		CS_INT_TYPE, &test, sizeof(test), CS_FLOAT_TYPE, sizeof(test2), CS_SUCCEED, &test2, sizeof(test2));
 
+#if FREETDS
 	DO_TEST(CS_INT test = 1234678; CS_MONEY4 test2 = {
 		1234678}
 		, CS_INT_TYPE, &test, sizeof(test), CS_MONEY4_TYPE, sizeof(test2), CS_FAIL, NULL, 0);
+#endif
 	DO_TEST(CS_INT test = -8765; CS_MONEY4 test2 = {
 		-8765 * 10000}
 		, CS_INT_TYPE, &test, sizeof(test), CS_MONEY4_TYPE, sizeof(test2), CS_SUCCEED, &test2, sizeof(test2));
@@ -263,6 +275,7 @@ main(void)
 		CS_CHAR test2[] = "12345",
 		CS_INT_TYPE, &test, sizeof(test), CS_CHAR_TYPE, sizeof(test2), CS_SUCCEED, test2, sizeof(test2) - 1);
 
+#if FREETDS
 	{ CS_VARCHAR test2 = { 5, "12345"};
 	memset(test2.str+5, 23, 251);
 	DO_TEST(CS_INT test = 12345,
@@ -270,6 +283,7 @@ main(void)
 		CS_VARCHAR_TYPE,sizeof(test2),
 		CS_SUCCEED,&test2,sizeof(test2));
 	}
+#endif
 
 	DO_TEST(CS_CHAR test[] = "12345";
 		CS_INT test2 = 12345, CS_CHAR_TYPE, test, 5, CS_INT_TYPE, sizeof(test2), CS_SUCCEED, &test2, sizeof(test2));
@@ -291,6 +305,8 @@ main(void)
 		CS_CHAR test2[] = "abc", CS_CHAR_TYPE, test, 6, CS_BINARY_TYPE, 3, CS_SUCCEED, test2, 3);
 	DO_TEST(CS_CHAR test[] = "616263646566";
 		CS_CHAR test2[] = "abc", CS_CHAR_TYPE, test, 12, CS_BINARY_TYPE, 3, CS_FAIL, test2, 3);
+	DO_TEST(CS_CHAR test[] = "hello";
+		CS_CHAR test2[] = "abc", CS_CHAR_TYPE, test, 12, CS_BINARY_TYPE, 10, CS_FAIL, test2, 0);
 
 	/* to char */
 	DO_TEST(CS_INT test = 1234567;
@@ -307,6 +323,16 @@ main(void)
 		CS_CHAR test2[12] = "abcdef", CS_CHAR_TYPE, test, 12, CS_IMAGE_TYPE, 12, CS_SUCCEED, test2, 6);
 	DO_TEST(CS_CHAR test[] = "616263646566";
 		CS_CHAR test2[12] = "abcdef", CS_CHAR_TYPE, test, 12, CS_BINARY_TYPE, 12, CS_SUCCEED, test2, 6);
+	DO_TEST(CS_CHAR test[] = "616263646566yyy";
+		CS_CHAR test2[] = "616263646566xxx", CS_BINARY_TYPE, test, 12, CS_BINARY_TYPE, 12, CS_SUCCEED, test2, 12);
+	DO_TEST(CS_CHAR test[] = "6162636465yyyyy";
+		CS_CHAR test2[] = "616263646566xxx", CS_BINARY_TYPE, test, 12, CS_BINARY_TYPE, 10, CS_FAIL, test2, 10);
+	DO_TEST(CS_CHAR test[] = "6162636465yyyyy";
+		CS_CHAR test2[] = "616263646566xxx", CS_IMAGE_TYPE, test, 12, CS_IMAGE_TYPE, 10, CS_FAIL, test2, 10);
+	DO_TEST(CS_CHAR test[] = "6162636465yyyyy";
+		CS_CHAR test2[] = "616263646566xxx", CS_BINARY_TYPE, test, 12, CS_IMAGE_TYPE, 10, CS_FAIL, test2, 10);
+	DO_TEST(CS_CHAR test[] = "6162636465yyyyy";
+		CS_CHAR test2[] = "616263646566xxx", CS_IMAGE_TYPE, test, 12, CS_BINARY_TYPE, 10, CS_FAIL, test2, 10);
 	DO_TEST(CS_CHAR test[] = "616263646566";
 		CS_VARBINARY test2; test2.len = 6; memset(test2.array, 23, 256); memcpy(test2.array, "abcdef", 6),
 		CS_CHAR_TYPE, test, 12, CS_VARBINARY_TYPE, 12, CS_SUCCEED, &test2, 258);

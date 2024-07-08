@@ -89,6 +89,7 @@
 
 #include <freetds/tds.h>
 #include <freetds/utils/string.h>
+#include <freetds/utils/nosigpipe.h>
 #include <freetds/tls.h>
 #include <freetds/replacements.h>
 
@@ -153,10 +154,6 @@ tds_socket_done(void)
 #elif defined(__VMS)
 #define TCP_NODELAY 1
 #define USE_NODELAY 1
-#endif
-
-#ifndef __APPLE__
-#undef SO_NOSIGPIPE
 #endif
 
 /**
@@ -671,6 +668,8 @@ tds_select(TDSSOCKET * tds, unsigned tds_sel, int timeout_seconds)
 
 			switch (sock_errno) {
 			case TDSSOCK_EINTR:
+			case EAGAIN:
+			case TDSSOCK_EINPROGRESS:
 				/* FIXME this should be global maximun, not loop one */
 				seconds += poll_seconds;
 				break;	/* let interrupt handler be called */
@@ -683,7 +682,10 @@ tds_select(TDSSOCKET * tds, unsigned tds_sel, int timeout_seconds)
 			}
 		}
 
-		assert(rc == 0 || (rc < 0 && sock_errno == TDSSOCK_EINTR));
+		assert(rc == 0 || (rc < 0 && (sock_errno == TDSSOCK_EINTR ||
+					      sock_errno == EAGAIN ||
+					      sock_errno == TDSSOCK_EINPROGRESS
+					      )));
 
 		if (tds_get_ctx(tds) && tds_get_ctx(tds)->int_handler) {	/* interrupt handler installed */
 			/*

@@ -325,7 +325,7 @@ tds_set_spid(TDSSOCKET * tds, TDSCOLUMN *curcol)
 }
 
 /**
- * Set ncharsize and unicharsize based on column data.
+ * Set ncharsize based on column data.
  * \tds
  * @param res_info  resultset to get data from.
  */
@@ -335,11 +335,26 @@ tds_set_nvc(TDSSOCKET * tds, TDSRESULTINFO *res_info)
 	int charsize;
 
 	/* Compute the ratios, put some acceptance in order to avoid issues. */
-	/* The "3" constant came from the query issued (NVARCHAR(3) and UNIVARCHAR(3)) */
+	/* The "3" constant came from the query issued (NVARCHAR(3)) */
 	charsize = res_info->columns[0]->on_server.column_size / 3;
 	if (charsize >= 1 && charsize <= 4)
 		tds->conn->ncharsize = (uint8_t) charsize;
-	charsize = res_info->columns[1]->on_server.column_size / 3;
+	return TDS_SUCCESS;
+}
+
+/**
+ * Set unicharsize based on column data.
+ * \tds
+ * @param res_info  resultset to get data from.
+ */
+static TDSRET
+tds_set_uvc(TDSSOCKET * tds, TDSRESULTINFO *res_info)
+{
+	int charsize;
+
+	/* Compute the ratios, put some acceptance in order to avoid issues. */
+	/* The "3" constant came from the query issued (UNIVARCHAR(3)) */
+	charsize = res_info->columns[0]->on_server.column_size / 3;
 	if (charsize >= 1 && charsize <= 4)
 		tds->conn->unicharsize = (uint8_t) charsize;
 	return TDS_SUCCESS;
@@ -356,6 +371,8 @@ tds_parse_login_results(TDSSOCKET * tds)
 	TDS_INT done_flags;
 	TDSRET rc;
 	TDSCOLUMN *curcol;
+	bool ignore_errors = false;
+	bool last_required = false;
 
 	CHECK_TDS_EXTRA(tds);
 
@@ -368,8 +385,12 @@ tds_parse_login_results(TDSSOCKET * tds)
 			curcol = tds->res_info->columns[0];
 			if (tds->res_info->num_cols == 1 && strcmp(tds_dstr_cstr(&curcol->column_name), "spid") == 0)
 				rc = tds_set_spid(tds, curcol);
-			if (tds->res_info->num_cols == 2 && strcmp(tds_dstr_cstr(&curcol->column_name), "nvc") == 0)
+			if (tds->res_info->num_cols == 1 && strcmp(tds_dstr_cstr(&curcol->column_name), "nvc") == 0) {
 				rc = tds_set_nvc(tds, tds->res_info);
+				last_required = true;
+			}
+			if (tds->res_info->num_cols == 1 && strcmp(tds_dstr_cstr(&curcol->column_name), "uvc") == 0)
+				rc = tds_set_uvc(tds, tds->res_info);
 			if (TDS_FAILED(rc))
 				return rc;
 			break;
@@ -377,8 +398,10 @@ tds_parse_login_results(TDSSOCKET * tds)
 		case TDS_DONE_RESULT:
 		case TDS_DONEPROC_RESULT:
 		case TDS_DONEINPROC_RESULT:
-			if ((done_flags & TDS_DONE_ERROR) != 0)
+			if ((done_flags & TDS_DONE_ERROR) != 0 && !ignore_errors)
 				return TDS_FAIL;
+			if (last_required)
+				ignore_errors = true;
 			break;
 		}
 	}
@@ -402,10 +425,10 @@ tds_setup_connection(TDSSOCKET *tds, TDSLOGIN *login, bool set_db, bool set_spid
 
 	str[0] = 0;
 	if (login->text_size) {
-		sprintf(str, "SET TEXTSIZE %d ", login->text_size);
+		sprintf(str, "SET TEXTSIZE %d\n", login->text_size);
 	}
 	if (set_spid && tds->conn->spid == -1) {
-		strcat(str, "SELECT @@spid AS spid ");
+		strcat(str, "SELECT @@spid spid\n");
 		parse_results = true;
 	}
 	/* Select proper database if specified.
@@ -415,10 +438,15 @@ tds_setup_connection(TDSSOCKET *tds, TDSLOGIN *login, bool set_db, bool set_spid
 	    (tds->conn->product_name == NULL || strcasecmp(tds->conn->product_name, "SQL Anywhere") != 0)) {
 		strcat(str, "USE ");
 		tds_quote_id(tds, strchr(str, 0), tds_dstr_cstr(&login->database), -1);
+		strcat(str, "\n");
 	}
-	if (IS_TDS50(tds->conn)) {
-		strcat(str, " SELECT CAST('abc' AS NVARCHAR(3)) AS nvc, CAST('xyz' AS UNIVARCHAR(3)) AS uvc");
+	if (IS_TDS50(tds->conn)
+	    &&	(tds->conn->product_name == NULL
+		 ||  strcasecmp(tds->conn->product_name, "OpenServer") != 0)) {
+		strcat(str, "SELECT CONVERT(NVARCHAR(3), 'abc') nvc\n");
 		parse_results = true;
+		if (tds->conn->product_version >= TDS_SYB_VER(12, 0, 0))
+			strcat(str, "EXECUTE ('SELECT CONVERT(UNIVARCHAR(3), ''xyz'') uvc')\n");
 	}
 
 	/* nothing to set, just return */
@@ -452,7 +480,7 @@ tds_setup_connection(TDSSOCKET *tds, TDSLOGIN *login, bool set_db, bool set_spid
  * 		- TDSEFCON: connect(2) succeeded, login packet not acknowledged.  
  *		- TDS_FAIL: connect(2) succeeded, login failed.  
  */
-static int
+static TDSRET
 tds_connect(TDSSOCKET * tds, TDSLOGIN * login, int *p_oserr)
 {
 	int erc = -TDSEFCON;
@@ -722,19 +750,24 @@ reroute:
 	return TDS_SUCCESS;
 }
 
-int
+TDSRET
 tds_connect_and_login(TDSSOCKET * tds, TDSLOGIN * login)
 {
 	int oserr = 0;
 	return tds_connect(tds, login, &oserr);
 }
 
-static int
+static void
 tds_put_login_string(TDSSOCKET * tds, const char *buf, int n)
 {
 	const int buf_len = buf ? (int)strlen(buf) : 0;
-	return tds_put_buf(tds, (const unsigned char *) buf, n, buf_len);
+	tds_put_buf(tds, (const unsigned char *) buf, n, buf_len);
 }
+
+#define tds_put_login_string(tds, buf, n) do { \
+	TDS_COMPILE_CHECK(range, (n) > 0 && (n) < 256); \
+	tds_put_login_string(tds, buf, (n)); \
+} while(0)
 
 static TDSRET
 tds_send_login(TDSSOCKET * tds, const TDSLOGIN * login)
@@ -1244,6 +1277,29 @@ tds7_crypt_pass(const unsigned char *clear_pass, size_t len, unsigned char *cryp
 		crypt_pass[i] = ((clear_pass[i] << 4) | (clear_pass[i] >> 4)) ^ 0xA5;
 }
 
+#if defined(HAVE_GNUTLS) || defined(HAVE_OPENSSL)
+static inline TDS_TINYINT
+tds7_get_encryption_byte(TDS_TINYINT encryption_level)
+{
+	switch (encryption_level) {
+	/* The observation working with Microsoft SQL Server is that
+	   OFF did not mean off, and you would end up with encryption
+	   turned on. Therefore when the freetds.conf says encrypt = off
+	   we really want no encryption, and claiming lack of support
+	   works for that. Note that the configuration default in this
+	   subroutine always been request due to code above that
+	   tests for TDS_ENCRYPTION_DEFAULT.
+	*/
+	case TDS_ENCRYPTION_OFF:
+	case TDS_ENCRYPTION_STRICT:
+		return TDS7_ENCRYPT_NOT_SUP;
+	case TDS_ENCRYPTION_REQUIRE:
+		return TDS7_ENCRYPT_ON;
+	}
+	return TDS7_ENCRYPT_OFF;
+}
+#endif
+
 static TDSRET
 tds71_do_login(TDSSOCKET * tds, TDSLOGIN* login)
 {
@@ -1301,6 +1357,13 @@ tds71_do_login(TDSSOCKET * tds, TDSLOGIN* login)
 	if (encryption_level == TDS_ENCRYPTION_DEFAULT)
 		encryption_level = TDS_ENCRYPTION_REQUEST;
 
+	/* all encrypted */
+	if (encryption_level == TDS_ENCRYPTION_STRICT) {
+		ret = tds_ssl_init(tds, true);
+		if (TDS_FAILED(ret))
+			return ret;
+	}
+
 	/*
 	 * fix a problem with mssql2k which doesn't like
 	 * packet splitted during SSL handshake
@@ -1319,17 +1382,7 @@ tds71_do_login(TDSSOCKET * tds, TDSLOGIN* login)
 	/* not supported */
 	tds_put_byte(tds, TDS7_ENCRYPT_NOT_SUP);
 #else
-	/* The observation working with Microsoft SQL Server is that
-	   OFF did not mean off, and you would end up with encryption
-	   turned on. Therefore when the freetds.conf says encrypt = off
-	   we really want no encryption, and claiming lack of support
-	   works for that. Note that the configuration default in this
-	   subroutine always been request due to code above that
-	   tests for TDS_ENCRYPTION_DEFAULT.
-	*/
-	tds_put_byte(tds, encryption_level == TDS_ENCRYPTION_OFF ? TDS7_ENCRYPT_NOT_SUP :
-			  encryption_level >= TDS_ENCRYPTION_REQUIRE ? TDS7_ENCRYPT_ON :
-			  TDS7_ENCRYPT_OFF);
+	tds_put_byte(tds, tds7_get_encryption_byte(encryption_level));
 #endif
 	/* instance */
 	tds_put_n(tds, instance_name, instance_name_len);
@@ -1395,10 +1448,10 @@ tds71_do_login(TDSSOCKET * tds, TDSLOGIN* login)
 	if (!mars_replied)
 		tds->conn->tds_version = 0x701;
 
-	/* if server do not has certificate do normal login */
-	if (crypt_flag == TDS7_ENCRYPT_NOT_SUP) {
+	/* if server does not have certificate or TLS already setup do normal login */
+	if (crypt_flag == TDS7_ENCRYPT_NOT_SUP || encryption_level == TDS_ENCRYPTION_STRICT) {
 		/* unless we wanted encryption and got none, then fail */
-		if (encryption_level >= TDS_ENCRYPTION_REQUIRE)
+		if (encryption_level == TDS_ENCRYPTION_REQUIRE)
 			return TDS_FAIL;
 
 		return tds7_send_login(tds, login);
@@ -1411,7 +1464,7 @@ tds71_do_login(TDSSOCKET * tds, TDSLOGIN* login)
 
 	/* here we have to do encryption ... */
 
-	ret = tds_ssl_init(tds);
+	ret = tds_ssl_init(tds, false);
 	if (TDS_FAILED(ret))
 		return ret;
 
