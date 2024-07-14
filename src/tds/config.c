@@ -143,7 +143,7 @@ tds_read_config_info(TDSSOCKET * tds, TDSLOGIN * login, TDSLOCALE * locale)
 	bool found;
 
 	/* allocate a new structure with hard coded and build-time defaults */
-	connection = tds_alloc_login(0);
+	connection = tds_alloc_login(false);
 	if (!connection || !tds_init_login(connection, locale)) {
 		tds_free_login(connection);
 		return NULL;
@@ -476,8 +476,9 @@ tds_config_encryption(const char * value, TDSLOGIN * login)
 	else {
 		tdsdump_log(TDS_DBG_ERROR, "UNRECOGNIZED option value '%s' for '%s' setting!\n",
 			    value, TDS_STR_ENCRYPTION);
-		tdsdump_log(TDS_DBG_ERROR, "Valid settings are: ('%s', '%s', '%s')\n",
-		        TDS_STR_ENCRYPTION_OFF, TDS_STR_ENCRYPTION_REQUEST, TDS_STR_ENCRYPTION_REQUIRE);
+		tdsdump_log(TDS_DBG_ERROR, "Valid settings are: ('%s', '%s', '%s', '%s')\n",
+		        TDS_STR_ENCRYPTION_OFF, TDS_STR_ENCRYPTION_REQUEST, TDS_STR_ENCRYPTION_REQUIRE,
+			TDS_STR_ENCRYPTION_STRICT);
 		lvl = TDS_ENCRYPTION_REQUIRE;  /* Assuming "require" is safer than "no" */
 		return false;
 	}
