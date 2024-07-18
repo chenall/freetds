@@ -109,6 +109,12 @@ BIO_get_data(const BIO *b)
 #define ASN1_STRING_get0_data(x) ASN1_STRING_data(x)
 #endif
 
+#if ENABLE_ODBC_MARS
+#define CONN2TDS(conn) (conn->in_net_tds)
+#else
+#define CONN2TDS(conn) ((TDSSOCKET *) conn)
+#endif
+
 static SSL_RET
 tds_pull_func_login(SSL_PULL_ARGS)
 {
@@ -160,12 +166,8 @@ tds_pull_func(SSL_PULL_ARGS)
 
 	tdsdump_log(TDS_DBG_FUNC, "in tds_pull_func\n");
 
-#if ENABLE_ODBC_MARS
-	tds = conn->in_net_tds;
+	tds = CONN2TDS(conn);
 	assert(tds);
-#else
-	tds = (TDSSOCKET *) conn;
-#endif
 
 	/* already initialized (crypted TDS packets) */
 
@@ -184,11 +186,7 @@ tds_push_func(SSL_PUSH_ARGS)
 	tdsdump_log(TDS_DBG_FUNC, "in tds_push_func\n");
 
 	/* write to socket directly */
-#if ENABLE_ODBC_MARS
-	tds = conn->in_net_tds;
-#else
-	tds = (TDSSOCKET *) conn;
-#endif
+	tds = CONN2TDS(conn);
 	return tds_goodwrite(tds, (const unsigned char*) data, len);
 }
 
@@ -209,6 +207,15 @@ set_current_tds(TDSCONNECTION *conn TDS_UNUSED, TDSSOCKET *tds TDS_UNUSED)
 {
 }
 #endif
+
+static const char *
+wanted_certificate_hostname(TDSLOGIN *login)
+{
+	if (!tds_dstr_isempty(&login->certificate_host_name))
+		return tds_dstr_cstr(&login->certificate_host_name);
+
+	return tds_dstr_cstr(&login->server_host_name);
+}
 
 #ifdef HAVE_GNUTLS
 
@@ -383,8 +390,10 @@ tds_verify_certificate(gnutls_session_t session)
 	const gnutls_datum_t *cert_list;
 #endif
 
-	if (!tds->login)
+	if (!tds->login) {
+		tdsdump_log(TDS_DBG_ERROR, "No login while checking certificate\n");
 		return GNUTLS_E_CERTIFICATE_ERROR;
+	}
 
 	ret = gnutls_certificate_verify_peers2(session, &status);
 	if (ret < 0) {
@@ -445,7 +454,7 @@ tds_verify_certificate(gnutls_session_t session)
 		}
 		gnutls_x509_crt_init(&cert);
 		gnutls_x509_crt_import(cert, &cert_list[0], GNUTLS_X509_FMT_DER);
-		ret = gnutls_x509_crt_check_hostname(cert, tds_dstr_cstr(&tds->login->server_host_name));
+		ret = gnutls_x509_crt_check_hostname(cert, wanted_certificate_hostname(tds->login));
 		gnutls_x509_crt_deinit(cert);
 		if (!ret) {
 			tdsdump_log(TDS_DBG_ERROR, "Certificate hostname does not match\n");
@@ -529,7 +538,7 @@ tds_ssl_init(TDSSOCKET *tds, bool full)
 		gnutls_transport_set_push_function(session, tds_push_func);
 	}
 
-	/* NOTE: there functions return int however they cannot fail */
+	/* NOTE: these functions return int however they cannot fail */
 
 	/* use default priorities... */
 	gnutls_set_default_priority(session);
@@ -1040,7 +1049,7 @@ tds_ssl_init(TDSSOCKET *tds, bool full)
 
 	BIO_set_init(b, 1);
 	BIO_set_data(b, full ? (void *) tds->conn : (void *) tds);
-	BIO_set_conn_hostname(b, tds_dstr_cstr(&tds->login->server_host_name));
+	BIO_set_conn_hostname(b, wanted_certificate_hostname(tds->login));
 	SSL_set_bio(con, b, b);
 	b = NULL;
 
@@ -1083,7 +1092,7 @@ tds_ssl_init(TDSSOCKET *tds, bool full)
 
 		cert =  SSL_get_peer_certificate(con);
 		tls_msg = "checking hostname";
-		if (!cert || !check_hostname(cert, tds_dstr_cstr(&tds->login->server_host_name)))
+		if (!cert || !check_hostname(cert, wanted_certificate_hostname(tds->login)))
 			goto cleanup;
 		X509_free(cert);
 	}

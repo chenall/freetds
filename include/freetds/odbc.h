@@ -74,7 +74,9 @@ extern "C"
 #endif
 
 #include <freetds/pushvis.h>
-#if defined(__GNUC__) && __GNUC__ >= 4 && !defined(__MINGW32__)
+#ifdef __clang__
+#define ODBC_API SQL_API __attribute__((visibility("default")))
+#elif defined(__GNUC__) && __GNUC__ >= 4 && !defined(__MINGW32__)
 #define ODBC_API SQL_API __attribute__((externally_visible))
 #else
 #define ODBC_API SQL_API
@@ -526,7 +528,9 @@ bool get_login_info(HWND hwndParent, TDSLOGIN * login);
 	ODBC_PARAM(ServerSPN) \
 	ODBC_PARAM(AttachDbFilename) \
 	ODBC_PARAM(ApplicationIntent) \
-	ODBC_PARAM(Timeout)
+	ODBC_PARAM(Timeout) \
+	ODBC_PARAM(Encrypt) \
+	ODBC_PARAM(HostNameInCertificate)
 
 #define ODBC_PARAM(p) ODBC_PARAM_##p,
 enum {
@@ -590,7 +594,7 @@ void tvp_free(SQLTVP *tvp);
  * odbc.c
  */
 
-SQLRETURN _SQLRowCount(SQLHSTMT hstmt, SQLLEN FAR * pcrow);
+SQLRETURN odbc_SQLRowCount(SQLHSTMT hstmt, SQLLEN FAR * pcrow);
 
 /*
  * odbc_checks.h

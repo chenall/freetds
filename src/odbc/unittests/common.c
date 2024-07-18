@@ -45,20 +45,20 @@ static int freetds_driver = -1;
 static int tds_version = -1;
 static char db_str_version[32];
 
-static int
+static bool
 check_lib(char *path, const char *file)
 {
-	int len = strlen(path);
+	size_t len = strlen(path);
 	FILE *f;
 
 	strcat(path, file);
 	f = fopen(path, "rb");
 	if (f) {
 		fclose(f);
-		return 1;
+		return true;
 	}
 	path[len] = 0;
-	return 0;
+	return false;
 }
 
 /* this should be extended with all possible systems... */
@@ -493,7 +493,8 @@ const char *odbc_db_version(void)
 	return db_str_version;
 }
 
-unsigned int odbc_db_version_int(void)
+unsigned int
+odbc_db_version_int(void)
 {
 	unsigned int h, l;
 	if (sscanf(odbc_db_version(), "%u.%u.", &h, &l) != 2) {
@@ -1003,3 +1004,17 @@ struct odbc_lookup_int odbc_sql_c_types[] = {
 #undef TYPE
 	{ NULL, 0 }
 };
+
+#ifdef _MSC_VER
+/* See https://learn.microsoft.com/en-us/cpp/preprocessor/warning?view=msvc-170 */
+#pragma warning(push)
+#pragma warning(disable:4996)
+#endif
+SQLRETURN
+SQLSetStmtOption_nowarning(SQLHSTMT hstmt, SQLSMALLINT option, SQLULEN param)
+{
+	return SQLSetStmtOption(hstmt, option, param);
+}
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
