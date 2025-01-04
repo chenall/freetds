@@ -405,6 +405,9 @@ blk_props(CS_BLKDESC * blkdesc, CS_INT action, CS_INT property, CS_VOID * buffer
 		}
 		break;
 
+	case BLK_HINTS:
+		return _ct_props_dstr(CONN(blkdesc), &blkdesc->bcpinfo.hint, action, buffer, buflen, outlen);
+
 	default:
 		_ctclient_msg(NULL, CONN(blkdesc), "blk_props", 2, 5, 1, 141, "%s, %d", "property", property);
 		break;
@@ -727,7 +730,8 @@ _blk_get_col_data(TDSBCPINFO *bulk, TDSCOLUMN *bindcol, int offset)
 		/* if convert return FAIL mark error but process other columns */
 		if ((result = _cs_convert(ctx, &srcfmt, (CS_VOID *) src,
 					 &destfmt, (CS_VOID *) bindcol->bcp_column_data->data, &destlen)) != CS_SUCCEED) {
-			tdsdump_log(TDS_DBG_INFO1, "convert failed for %d \n", srctype);
+			tdsdump_log(TDS_DBG_ERROR, "conversion from srctype %d to desttype %d failed\n",
+				    srctype, desttype);
 			return TDS_FAIL;
 		}
 	}

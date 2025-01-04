@@ -84,7 +84,7 @@ typedef struct tds_compiletime_settings
 	const char *freetds_version;	/* release version of FreeTDS */
 	const tds_dir_char *sysconfdir;		/* location of freetds.conf */
 	const char *last_update;	/* latest software_version date among the modules */
-	const char *tdsver;	/* TDS protocol version (4.2/4.6/5.0/7.0/7.1) 5.0 */
+	const char *tdsver;	/* TDS protocol version (4.2/4.6/5.0/7.0/7.1/8.0) 5.0 */
 	bool msdblib;		/* for MS style dblib */
 	bool sybase_compat;	/* enable increased Open Client binary compatibility */
 	bool threadsafe;		/* compile for thread safety default=no */
@@ -241,30 +241,6 @@ enum tds_token_flags
 	TDS_TOKEN_RESULTS = TDS_RETURN_ROWFMT|TDS_RETURN_COMPUTEFMT|TDS_RETURN_DONE|TDS_STOPAT_ROW|TDS_STOPAT_COMPUTE|TDS_RETURN_PROC,
 	TDS_TOKEN_TRAILING = TDS_STOPAT_ROWFMT|TDS_STOPAT_COMPUTEFMT|TDS_STOPAT_ROW|TDS_STOPAT_COMPUTE|TDS_STOPAT_MSG|TDS_STOPAT_OTHERS
 };
-
-/**
- * Flags returned in TDS_DONE token
- */
-enum tds_end
-{
-	  TDS_DONE_FINAL 	= 0x00	/**< final result set, command completed successfully. */
-	, TDS_DONE_MORE_RESULTS = 0x01	/**< more results follow */
-	, TDS_DONE_ERROR 	= 0x02	/**< error occurred */
-	, TDS_DONE_INXACT 	= 0x04	/**< transaction in progress */
-	, TDS_DONE_PROC 	= 0x08	/**< results are from a stored procedure */
-	, TDS_DONE_COUNT 	= 0x10	/**< count field in packet is valid */
-	, TDS_DONE_CANCELLED 	= 0x20	/**< acknowledging an attention command (usually a cancel) */
-	, TDS_DONE_EVENT 	= 0x40	/*   part of an event notification. */
-	, TDS_DONE_SRVERROR 	= 0x100	/**< SQL server server error */
-	
-	/* after the above flags, a TDS_DONE packet has a field describing the state of the transaction */
-	, TDS_DONE_NO_TRAN 	= 0	/* No transaction in effect */
-	, TDS_DONE_TRAN_SUCCEED = 1	/* Transaction completed successfully */
-	, TDS_DONE_TRAN_PROGRESS= 2	/* Transaction in progress */
-	, TDS_DONE_STMT_ABORT 	= 3	/* A statement aborted */
-	, TDS_DONE_TRAN_ABORT 	= 4	/* Transaction aborted */
-};
-
 
 /*
  * TDSERRNO is emitted by libtds to the client library's error handler
@@ -748,7 +724,7 @@ struct tds_column
 	/* FIXME find a best place to store these data, some are unused */
 	TDS_SMALLINT column_bindtype;
 	TDS_SMALLINT column_bindfmt;
-	TDS_UINT column_bindlen;
+	TDS_INT column_bindlen;
 	TDS_SMALLINT *column_nullbind;
 	TDS_CHAR *column_varaddr;
 	TDS_INT *column_lenbind;
@@ -808,7 +784,7 @@ typedef enum tds_operations
 {
 	TDS_OP_NONE		= 0,
 
-	/* mssql operations */
+	/* MSSQL operations, these matches protocol definitions */
 	TDS_OP_CURSOR		= TDS_SP_CURSOR,
 	TDS_OP_CURSOROPEN	= TDS_SP_CURSOROPEN,
 	TDS_OP_CURSORPREPARE	= TDS_SP_CURSORPREPARE,
@@ -1334,6 +1310,7 @@ TDSDYNAMIC *tds_lookup_dynamic(TDSCONNECTION * conn, const char *id);
 /*@observer@*/ const char *tds_prtype(int token);
 int tds_get_varint_size(TDSCONNECTION * conn, int datatype);
 TDS_SERVER_TYPE tds_get_cardinal_type(TDS_SERVER_TYPE datatype, int usertype);
+TDSRET tds8_adjust_login(TDSLOGIN *login);
 
 
 /* iconv.c */
@@ -1558,9 +1535,9 @@ void tdsdump_log(const char* file, unsigned int level_line, const char *fmt, ...
 #define TDSDUMP_BUF_FAST if (TDS_UNLIKELY(tds_write_dump)) tdsdump_dump_buf
 #define tdsdump_dump_buf TDSDUMP_BUF_FAST
 
-extern int tds_write_dump;
+extern bool tds_write_dump;
 extern int tds_debug_flags;
-extern int tds_g_append_mode;
+extern int tds_append_mode;
 
 
 /* net.c */
@@ -1616,6 +1593,7 @@ void tds_freeze(TDSSOCKET *tds, TDSFREEZE *freeze, unsigned size_len);
 size_t tds_freeze_written(TDSFREEZE *freeze);
 TDSRET tds_freeze_abort(TDSFREEZE *freeze);
 TDSRET tds_freeze_close(TDSFREEZE *freeze);
+TDSRET tds_freeze_close_string(TDSFREEZE *freeze);
 TDSRET tds_freeze_close_len(TDSFREEZE *freeze, int32_t size);
 
 inline static void
@@ -1636,6 +1614,7 @@ tds_set_current_send_packet(TDSSOCKET *tds, TDSPACKET *pkt)
 	TDSFREEZE current_freeze[1]; \
 	tds_freeze((tds_socket), current_freeze, (len)); do { do
 #define TDS_END_LEN while(0); } while(tds_freeze_close(current_freeze), 0); } while(0);
+#define TDS_END_LEN_STRING while(0); } while(tds_freeze_close_string(current_freeze), 0); } while(0);
 
 #define TDS_START_LEN_TINYINT(tds_socket) TDS_START_LEN_GENERIC(tds_socket, 1)
 #define TDS_START_LEN_USMALLINT(tds_socket) TDS_START_LEN_GENERIC(tds_socket, 2)
@@ -1700,8 +1679,8 @@ typedef struct tds5_colinfo
 
 struct tds_bcpinfo
 {
-	const char *hint;
 	void *parent;
+	DSTR hint;
 	DSTR tablename;
 	TDS_CHAR *insert_stmt;
 	TDS_INT direction;
@@ -1753,15 +1732,16 @@ tds_capability_enabled(const TDS_CAPABILITY_TYPE *cap, unsigned cap_num)
 #define IS_TDS72_PLUS(x) ((x)->tds_version>=0x702)
 #define IS_TDS73_PLUS(x) ((x)->tds_version>=0x703)
 #define IS_TDS74_PLUS(x) ((x)->tds_version>=0x704)
+#define IS_TDS80_PLUS(x) ((x)->tds_version>=0x800)
 
 #define TDS_MAJOR(x) ((x)->tds_version >> 8)
 #define TDS_MINOR(x) ((x)->tds_version & 0xff)
 
 #define IS_TDSDEAD(x) (((x) == NULL) || (x)->state == TDS_DEAD)
 
-/** Check if product is Sybase (such as Adaptive Server Enterrprice). x should be a TDSSOCKET*. */
+/** Check if product is Sybase (such as Adaptive Server Enterprise). x should be a TDSSOCKET*. */
 #define TDS_IS_SYBASE(x) (!((x)->conn->product_version & 0x80000000u))
-/** Check if product is Microsft SQL Server. x should be a TDSSOCKET*. */
+/** Check if product is Microsoft SQL Server. x should be a TDSSOCKET*. */
 #define TDS_IS_MSSQL(x) (((x)->conn->product_version & 0x80000000u)!=0)
 
 /** Calc a version number for mssql. Use with TDS_MS_VER(7,0,842).

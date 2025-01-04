@@ -52,10 +52,10 @@
 
 /* for now all messages go to the log */
 int tds_debug_flags = TDS_DBGFLAG_ALL | TDS_DBGFLAG_SOURCE;
-int tds_g_append_mode = 0;
+int tds_append_mode = 0;
 static tds_dir_char *g_dump_filename = NULL;
 /** Tell if TDS debug logging is turned on or off */
-int tds_write_dump = 0;
+bool tds_write_dump = false;
 /** List of threads excluded from logging, used to exclude some sensitive data */
 static TDSDUMP_OFF_ITEM *off_list;
 static FILE *g_dumpfile = NULL;	/* file pointer for dump log          */
@@ -113,7 +113,7 @@ tdsdump_on(TDSDUMP_OFF_ITEM *off_item)
 }
 
 int
-tdsdump_isopen()
+tdsdump_isopen(void)
 {
 	return g_dumpfile || g_dump_filename;
 }
@@ -135,12 +135,12 @@ tdsdump_open(const tds_dir_char *filename)
 	tds_mutex_lock(&g_dump_mutex);
 
 	/* same append file */
-	if (tds_g_append_mode && filename != NULL && g_dump_filename != NULL && tds_dir_cmp(filename, g_dump_filename) == 0) {
+	if (tds_append_mode && filename != NULL && g_dump_filename != NULL && tds_dir_cmp(filename, g_dump_filename) == 0) {
 		tds_mutex_unlock(&g_dump_mutex);
 		return 1;
 	}
 
-	tds_write_dump = 0;
+	tds_write_dump = false;
 
 	/* free old one */
 	if (g_dumpfile != NULL && g_dumpfile != stdout && g_dumpfile != stderr)
@@ -156,7 +156,7 @@ tdsdump_open(const tds_dir_char *filename)
 	}
 
 	result = 1;
-	if (tds_g_append_mode) {
+	if (tds_append_mode) {
 		g_dump_filename = tds_dir_dup(filename);
 		/* if mutex are available do not reopen file every time */
 #ifdef TDS_HAVE_MUTEX
@@ -171,7 +171,7 @@ tdsdump_open(const tds_dir_char *filename)
 	}
 
 	if (result)
-		tds_write_dump = 1;
+		tds_write_dump = true;
 	tds_mutex_unlock(&g_dump_mutex);
 
 	if (result) {
@@ -212,7 +212,7 @@ void
 tdsdump_close(void)
 {
 	tds_mutex_lock(&g_dump_mutex);
-	tds_write_dump = 0;
+	tds_write_dump = false;
 	if (g_dumpfile != NULL && g_dumpfile != stdout && g_dumpfile != stderr)
 		fclose(g_dumpfile);
 	g_dumpfile = NULL;
@@ -315,10 +315,10 @@ tdsdump_dump_buf(const char* file, unsigned int level_line, const char *msg, con
 
 	dumpfile = g_dumpfile;
 #ifdef TDS_HAVE_MUTEX
-	if (tds_g_append_mode && dumpfile == NULL)
+	if (tds_append_mode && dumpfile == NULL)
 		dumpfile = g_dumpfile = tdsdump_append();
 #else
-	if (tds_g_append_mode)
+	if (tds_append_mode)
 		dumpfile = tdsdump_append();
 #endif
 
@@ -373,7 +373,7 @@ tdsdump_dump_buf(const char* file, unsigned int level_line, const char *msg, con
 	fflush(dumpfile);
 
 #ifndef TDS_HAVE_MUTEX
-	if (tds_g_append_mode) {
+	if (tds_append_mode) {
 		if (dumpfile != stdout && dumpfile != stderr)
 			fclose(dumpfile);
 	}
@@ -415,10 +415,10 @@ tdsdump_log(const char* file, unsigned int level_line, const char *fmt, ...)
 
 	dumpfile = g_dumpfile;
 #ifdef TDS_HAVE_MUTEX
-	if (tds_g_append_mode && dumpfile == NULL)
+	if (tds_append_mode && dumpfile == NULL)
 		dumpfile = g_dumpfile = tdsdump_append();
 #else
-	if (tds_g_append_mode)
+	if (tds_append_mode)
 		dumpfile = tdsdump_append();
 #endif
 	
@@ -437,7 +437,7 @@ tdsdump_log(const char* file, unsigned int level_line, const char *fmt, ...)
 	fflush(dumpfile);
 
 #ifndef TDS_HAVE_MUTEX
-	if (tds_g_append_mode) {
+	if (tds_append_mode) {
 		if (dumpfile != stdout && dumpfile != stderr)
 			fclose(dumpfile);
 	}

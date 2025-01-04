@@ -47,7 +47,8 @@ extern "C"
  */
 struct _cs_config
 {
-	short cs_expose_formats;
+	bool cs_expose_formats;
+	bool cs_note_empty_data;
 };
 
 /* Code changed for error handling */
@@ -400,6 +401,8 @@ const CS_DATAFMT_COMMON * _ct_datafmt_common(CS_CONTEXT * ctx, const CS_DATAFMT 
 const CS_DATAFMT_LARGE *_ct_datafmt_conv_in(CS_CONTEXT * ctx, const CS_DATAFMT * datafmt, CS_DATAFMT_LARGE * fmtbuf);
 CS_DATAFMT_LARGE *_ct_datafmt_conv_prepare(CS_CONTEXT * ctx, CS_DATAFMT * datafmt, CS_DATAFMT_LARGE * fmtbuf);
 void _ct_datafmt_conv_back(CS_DATAFMT * datafmt, CS_DATAFMT_LARGE * fmtbuf);
+
+CS_RETCODE _ct_props_dstr(CS_CONNECTION * con, DSTR *s, CS_INT action, CS_VOID * buffer, CS_INT buflen, CS_INT * outlen);
 
 #ifdef __cplusplus
 #if 0

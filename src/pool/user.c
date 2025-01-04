@@ -159,6 +159,8 @@ pool_user_create(TDS_POOL * pool, TDS_SYS_SOCKET s)
 		return NULL;
 	}
 
+	tds_socket_set_nodelay(fd);
+
 	if (tds_socket_set_nonblocking(fd) != 0) {
 		CLOSESOCKET(fd);
 		return NULL;
@@ -250,7 +252,7 @@ pool_process_users(TDS_POOL * pool, struct pollfd *fds, unsigned num_fds)
 
 		revents = fds[puser->sock.poll_index].revents;
 
-		if (puser->sock.poll_recv && (revents & POLLIN) != 0) {
+		if (puser->sock.poll_recv && (revents & (POLLIN|POLLHUP)) != 0) {
 			assert(puser->user_state == TDS_SRV_QUERY);
 			if (!pool_user_read(pool, puser))
 				continue;
@@ -305,6 +307,10 @@ pool_user_login(TDS_POOL * pool, TDS_POOL_USER * puser)
 	}
 
 	puser->login = login = tds_alloc_login(true);
+	if (!login) {
+		tdsdump_log(TDS_DBG_ERROR, "tds_alloc_login() failed.\n");
+		return false;
+	}
 	if (tds->in_flag == TDS_LOGIN) {
 		if (!tds->conn->tds_version)
 			tds->conn->tds_version = 0x500;
@@ -432,7 +438,7 @@ pool_user_send_login_ack(TDS_POOL * pool, TDS_POOL_USER * puser)
 	sprintf(block, "%d", tds->conn->env.block_size);
 	tds_env_change(tds, TDS_ENV_PACKSIZE, block, block);
 	/* tds_send_capabilities_token(tds); */
-	tds_send_done_token(tds, 0, 0);
+	tds_send_done_token(tds, TDS_DONE_FINAL, 0);
 
 	/* send it! */
 	tds_flush_packet(tds);

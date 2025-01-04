@@ -53,17 +53,26 @@ typedef int pid_t;
 #define getpid() _gethostid()
 #endif	/* defined(DOS32X) */
 
-#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(_WIN64)
+#ifdef _WIN32
 #include <freetds/windows.h>
 #define READSOCKET(a,b,c)	recv((a), (char *) (b), (c), TDS_NOSIGNAL)
 #define WRITESOCKET(a,b,c)	send((a), (const char *) (b), (c), TDS_NOSIGNAL)
 #define CLOSESOCKET(a)		closesocket((a))
 #define IOCTLSOCKET(a,b,c)	ioctlsocket((a), (b), (c))
 #define SOCKLEN_T int
-TDS_EXTERN_C int  tds_socket_init(void);
-#define INITSOCKET()	tds_socket_init()
-TDS_EXTERN_C void tds_socket_done(void);
-#define DONESOCKET()	tds_socket_done()
+static inline int
+tds_socket_init(void)
+{
+	WSADATA wsadata;
+
+	return WSAStartup(MAKEWORD(2, 2), &wsadata);
+}
+
+static inline void
+tds_socket_done(void)
+{
+	WSACleanup();
+}
 #define NETDB_REENTRANT 1	/* BSD-style netdb interface is reentrant */
 
 #define TDSSOCK_EINTR WSAEINTR
@@ -114,7 +123,7 @@ typedef DWORD pid_t;
 #define strnicmp(s1,s2,n)  _strnicmp(s1,s2,n)
 #endif
 
-#endif /* defined(WIN32) || defined(_WIN32) || defined(__WIN32__) */
+#endif /* defined(_WIN32) */
 
 #ifndef sock_errno
 #define sock_errno errno
@@ -153,13 +162,18 @@ typedef DWORD pid_t;
 #define TDSSOCK_ECONNRESET ECONNRESET
 #endif
 
-#ifndef INITSOCKET
-#define INITSOCKET()	0
-#endif /* !INITSOCKET */
+#ifndef _WIN32
+static inline int
+tds_socket_init(void)
+{
+	return 0;
+}
 
-#ifndef DONESOCKET
-#define DONESOCKET()	do { } while(0)
-#endif /* !DONESOCKET */
+static inline void
+tds_socket_done(void)
+{
+}
+#endif
 
 #ifndef READSOCKET
 # ifdef MSG_NOSIGNAL
@@ -189,7 +203,7 @@ typedef DWORD pid_t;
 # define SOCKLEN_T socklen_t
 #endif
 
-#if !defined(__WIN32__) && !defined(_WIN32) && !defined(WIN32)
+#ifndef _WIN32
 typedef int TDS_SYS_SOCKET;
 #define INVALID_SOCKET -1
 #define TDS_IS_SOCKET_INVALID(s) ((s) < 0)

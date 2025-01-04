@@ -22,13 +22,11 @@
 #include <netinet/in.h>
 #endif /* HAVE_NETINET_IN_H */
 
-#if HAVE_POLL_H
-#include <poll.h>
-#endif /* HAVE_POLL_H */
-
 #include <freetds/tds.h>
-#include <freetds/thread.h>
 #include <freetds/replacements.h>
+#include <freetds/utils.h>
+
+#include "fake_thread.h"
 
 #if TDS_HAVE_MUTEX
 
@@ -42,45 +40,11 @@ init_connect(void)
 	CHKAllocConnect(&odbc_conn, "S");
 }
 
-static tds_thread fake_thread;
 static tds_mutex mtx;
 static TDS_SYS_SOCKET fake_sock;
 
-static TDS_THREAD_PROC_DECLARE(fake_thread_proc, arg);
-
-/* build a listening socket to connect to */
-static int
-init_fake_server(int ip_port)
-{
-	struct sockaddr_in sin;
-	TDS_SYS_SOCKET s;
-	int err;
-
-	memset(&sin, 0, sizeof(sin));
-	sin.sin_addr.s_addr = INADDR_ANY;
-	sin.sin_port = htons((short) ip_port);
-	sin.sin_family = AF_INET;
-
-	if (TDS_IS_SOCKET_INVALID(s = socket(AF_INET, SOCK_STREAM, 0))) {
-		perror("socket");
-		exit(1);
-	}
-	if (bind(s, (struct sockaddr *) &sin, sizeof(sin)) < 0) {
-		perror("bind");
-		CLOSESOCKET(s);
-		return 1;
-	}
-	listen(s, 5);
-	err = tds_thread_create(&fake_thread, fake_thread_proc, TDS_INT2PTR(s));
-	if (err != 0) {
-		perror("tds_thread_create");
-		exit(1);
-	}
-	return 0;
-}
-
 /* accept a socket and read data as much as you can */
-static TDS_THREAD_PROC_DECLARE(fake_thread_proc, arg)
+TDS_THREAD_PROC_DECLARE(fake_thread_proc, arg)
 {
 	TDS_SYS_SOCKET s = TDS_PTR2INT(arg), sock;
 	socklen_t len;
@@ -103,6 +67,7 @@ static TDS_THREAD_PROC_DECLARE(fake_thread_proc, arg)
 		perror("accept");
 		exit(1);
 	}
+	tds_socket_set_nodelay(sock);
 	tds_mutex_lock(&mtx);
 	fake_sock = sock;
 	tds_mutex_unlock(&mtx);
@@ -139,10 +104,7 @@ main(void)
 	int port;
 	time_t start_time, end_time;
 
-#ifdef _WIN32
-	WSADATA wsaData;
-	WSAStartup(MAKEWORD(2, 2), &wsaData);
-#endif
+	tds_socket_init();
 
 	if (tds_mutex_init(&mtx))
 		return 1;
@@ -171,9 +133,10 @@ main(void)
 
 	/* this test requires version 7.0, avoid to override externally */
 	setenv("TDSVER", "7.0", 1);
+	unsetenv("TDSPORT");
 
 	for (port = 12340; port < 12350; ++port)
-		if (!init_fake_server(port))
+		if (init_fake_server(port))
 			break;
 	if (port == 12350) {
 		fprintf(stderr, "Cannot bind to a port\n");

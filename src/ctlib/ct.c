@@ -408,7 +408,7 @@ ct_con_props(CS_CONNECTION * con, CS_INT action, CS_INT property, CS_VOID * buff
 	if (!con)
 		return CS_FAIL;
 
-	tdsdump_log(TDS_DBG_FUNC, "ct_con_props() action = %s property = %d\n", CS_GET ? "CS_GET" : "CS_SET", property);
+	tdsdump_log(TDS_DBG_FUNC, "ct_con_props() action = %s property = %d\n", action == CS_GET ? "CS_GET" : "CS_SET", property);
 
 	tds = con->tds_socket;
 	tds_login = con->tds_login;
@@ -549,6 +549,8 @@ ct_con_props(CS_CONNECTION * con, CS_INT action, CS_INT property, CS_VOID * buff
 				tds_set_version(tds_login, 7, 3);
 			} else if (*(int *) buffer == CS_TDS_74) {
 				tds_set_version(tds_login, 7, 4);
+			} else if (*(int *) buffer == CS_TDS_80) {
+				tds_set_version(tds_login, 8, 0);
 			} else {
 				return CS_FAIL;
 			}
@@ -611,6 +613,14 @@ ct_con_props(CS_CONNECTION * con, CS_INT action, CS_INT property, CS_VOID * buff
 			if (out_len)
 				*out_len = tds_dstr_len(s);
 			strlcpy((char *) buffer, tds_dstr_cstr(s), buflen);
+			break;
+		case CS_PRODUCT_NAME:
+			if (IS_TDSDEAD(tds) || tds->conn->product_name == NULL)
+				/* TODO return proper error */
+				return CS_FAIL;
+			if (out_len)
+				*out_len = (CS_INT) strlen(tds->conn->product_name);
+			strlcpy((char *) buffer, tds->conn->product_name, buflen);
 			break;
 		case CS_LOC_PROP:
 			if (buflen != CS_UNUSED || !con->locale || !buffer)
@@ -684,6 +694,9 @@ ct_con_props(CS_CONNECTION * con, CS_INT action, CS_INT property, CS_VOID * buff
 			case 0x704:
 				(*(int *) buffer = CS_TDS_74);
 				break;
+			case 0x800:
+				(*(int *) buffer = CS_TDS_80);
+				break;
 			default:
 				return CS_FAIL;
 			}
@@ -700,6 +713,9 @@ ct_con_props(CS_CONNECTION * con, CS_INT action, CS_INT property, CS_VOID * buff
 		        *(CS_INT *) buffer = tds_login->connect_timeout;
 			if (tds_login->connect_timeout == 0)
 				*(CS_INT *) buffer = CS_NO_LIMIT;
+			break;
+		case CS_ENDPOINT:
+			*(CS_INT *) buffer = tds_get_s(con->tds_socket);
 			break;
 		default:
 			tdsdump_log(TDS_DBG_ERROR, "Unknown property %d\n", property);
@@ -1954,7 +1970,8 @@ _ct_bind_data(CS_CONTEXT *ctx, TDSRESULTINFO * resinfo, TDSRESULTINFO *bindinfo,
 		destfmt.format = bindcol->column_bindfmt;
 
 		/* if convert return FAIL mark error but process other columns */
-		if ((ret = _cs_convert(ctx, &srcfmt, src, &destfmt, dest, pdatalen) != CS_SUCCEED)) {
+		ret = _cs_convert(ctx, &srcfmt, src, &destfmt, dest, pdatalen);
+		if (ret != CS_SUCCEED) {
 			tdsdump_log(TDS_DBG_FUNC, "cs_convert-result = %d\n", ret);
 			result = 1;
 			tdsdump_log(TDS_DBG_INFO1, "error: converted only %d bytes for type %d \n",
@@ -2498,8 +2515,11 @@ ct_describe(CS_COMMAND * cmd, CS_INT item, CS_DATAFMT * datafmt_arg)
 	datafmt->namelen = strlen(datafmt->name);
 	/* need to turn the SYBxxx into a CS_xxx_TYPE */
 	datafmt->datatype = _ct_get_client_type(curcol, true);
-	if (datafmt->datatype == CS_ILLEGAL_TYPE)
+	if (datafmt->datatype == CS_ILLEGAL_TYPE) {
+		_ctclient_msg(NULL, cmd->con, "ct_describe", 1, 1, 1, 4,
+			      "%s, %s", "column type", tds_prtype(curcol->column_type));
 		return CS_FAIL;
+	}
 	tdsdump_log(TDS_DBG_INFO1, "ct_describe() datafmt->datatype = %d server type %d\n", datafmt->datatype,
 		    curcol->column_type);
 	if (is_numeric_type(curcol->column_type))
@@ -2587,6 +2607,37 @@ ct_res_info(CS_COMMAND * cmd, CS_INT type, CS_VOID * buffer, CS_INT buflen, CS_I
 
 }
 
+static CS_RETCODE
+config_bool(CS_INT action, CS_INT *buf, bool *variable)
+{
+	switch (action) {
+	case CS_SUPPORTED:
+		if (buf) {
+			*buf = CS_TRUE;
+			return CS_SUCCEED;
+		}
+		break;
+	case CS_SET:
+		if (buf && (*buf == CS_TRUE || *buf == CS_FALSE)) {
+			*variable = (*buf != CS_FALSE);
+			return CS_SUCCEED;
+		}
+		break;
+	case CS_GET:
+		if (buf) {
+			*buf = (*variable ? CS_TRUE : CS_FALSE);
+			return CS_SUCCEED;
+		}
+		break;
+	case CS_CLEAR:
+		*variable = false;
+		return CS_SUCCEED;
+	default:
+		break;
+	}
+	return CS_FAIL;
+}
+
 CS_RETCODE
 ct_config(CS_CONTEXT * ctx, CS_INT action, CS_INT property, CS_VOID * buffer, CS_INT buflen, CS_INT * outlen)
 {
@@ -2600,28 +2651,7 @@ ct_config(CS_CONTEXT * ctx, CS_INT action, CS_INT property, CS_VOID * buffer, CS
 
 	switch (property) {
 	case CS_EXPOSE_FMTS:
-		switch (action) {
-		case CS_SUPPORTED:
-			*buf = CS_TRUE;
-			break;
-		case CS_SET:
-			if (*buf != CS_TRUE && *buf != CS_FALSE)
-				ret = CS_FAIL;
-			else
-				ctx->config.cs_expose_formats = *buf;
-			break;
-		case CS_GET:
-			if (buf)
-				*buf = ctx->config.cs_expose_formats;
-			else
-				ret = CS_FAIL;
-			break;
-		case CS_CLEAR:
-			ctx->config.cs_expose_formats = CS_FALSE;
-			break;
-		default:
-			ret = CS_FAIL;
-		}
+		ret = config_bool(action, buf, &ctx->config.cs_expose_formats);
 		break;
 	case CS_VER_STRING: {
 		ret = CS_FAIL;
@@ -2697,6 +2727,9 @@ ct_config(CS_CONTEXT * ctx, CS_INT action, CS_INT property, CS_VOID * buffer, CS
 			ret = CS_FAIL;
 			break;
 		}
+		break;
+	case CS_NOTE_EMPTY_DATA:
+		ret = config_bool(action, buf, &ctx->config.cs_note_empty_data);
 		break;
 	default:
 		ret = CS_SUCCEED;
@@ -2979,8 +3012,19 @@ ct_get_data(CS_COMMAND * cmd, CS_INT item, CS_VOID * buffer, CS_INT buflen, CS_I
 	 */
 
 	srclen = curcol->column_cur_size;
-	if (srclen < 0)
-		srclen = 0;
+	if (srclen < 0) {
+		/* this is NULL */
+		if (!cmd->con->ctx->config.cs_note_empty_data) {
+			srclen = 0;
+		} else {
+			if (outlen)
+				*outlen = srclen;
+			if (item < resinfo->num_cols)
+				return CS_END_ITEM;
+			return CS_END_DATA;
+		}
+	}
+
 	src += cmd->get_data_bytes_returned;
 	srclen -= cmd->get_data_bytes_returned;
 

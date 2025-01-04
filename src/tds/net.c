@@ -69,10 +69,6 @@
 #include <sys/select.h>
 #endif /* HAVE_SELECT_H */
 
-#if HAVE_POLL_H
-#include <poll.h>
-#endif /* HAVE_POLL_H */
-
 #if HAVE_FCNTL_H
 #include <fcntl.h>
 #endif /* HAVE_FCNTL_H */
@@ -109,22 +105,6 @@ static void tds_check_cancel(TDSCONNECTION *conn);
  * \addtogroup network
  * @{ 
  */
-
-#ifdef _WIN32
-int
-tds_socket_init(void)
-{
-	WSADATA wsadata;
-
-	return WSAStartup(MAKEWORD(2, 2), &wsadata);
-}
-
-void
-tds_socket_done(void)
-{
-	WSACleanup();
-}
-#endif
 
 #if !defined(SOL_TCP) && (defined(IPPROTO_TCP) || defined(_WIN32))
 /* fix incompatibility between MS headers */

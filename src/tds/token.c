@@ -289,6 +289,7 @@ tds_process_loginack(TDSSOCKET *tds, TDSRET *login_succeeded)
 	unsigned char ack;
 	TDS_UINT product_version;
 	int memrc = 0;
+	TDS_USMALLINT orig_tds_version = tds->conn->tds_version;
 
 	struct 	{ unsigned char major, minor, tiny[2];
 		  unsigned int reported;
@@ -382,6 +383,10 @@ tds_process_loginack(TDSSOCKET *tds, TDSRET *login_succeeded)
 		product_version = ((product_version & 0xffff00u) | 0x800000u) << 8;
 	tds->conn->product_version = product_version;
 	tdsdump_log(TDS_DBG_FUNC, "Product version %lX\n", (unsigned long) product_version);
+
+	/* internal version is ignored for TDS 8.0+ */
+	if (orig_tds_version >= 0x800)
+		tds->conn->tds_version = orig_tds_version;
 
 	/*
 	 * TDS 5.0 reports 5 on success 6 on failure
@@ -2082,19 +2087,19 @@ static TDSRET
 tds_process_end(TDSSOCKET * tds, int marker TDS_UNUSED, int *flags_parm)
 {
 	bool more_results, was_cancelled, error, done_count_valid;
-	int tmp;
+	int status;
 	TDS_INT8 rows_affected;
 
 	CHECK_TDS_EXTRA(tds);
 
-	tmp = tds_get_usmallint(tds);
+	status = tds_get_usmallint(tds);
 
-	tds_get_smallint(tds);	/* state */
+	tds_get_smallint(tds);	/* state/command */
 
-	more_results = (tmp & TDS_DONE_MORE_RESULTS) != 0;
-	was_cancelled = (tmp & TDS_DONE_CANCELLED) != 0;
-	error = (tmp & TDS_DONE_ERROR) != 0;
-	done_count_valid = (tmp & TDS_DONE_COUNT) != 0;
+	more_results = (status & TDS_DONE_MORE_RESULTS) != 0;
+	was_cancelled = (status & TDS_DONE_CANCELLED) != 0;
+	error = (status & TDS_DONE_ERROR) != 0;
+	done_count_valid = (status & TDS_DONE_COUNT) != 0;
 
 
 	tdsdump_log(TDS_DBG_FUNC, "tds_process_end: more_results = %d\n"
@@ -2113,7 +2118,7 @@ tds_process_end(TDSSOCKET * tds, int marker TDS_UNUSED, int *flags_parm)
 	}
 
 	if (flags_parm)
-		*flags_parm = tmp;
+		*flags_parm = status;
 
 	rows_affected = IS_TDS72_PLUS(tds->conn) ? tds_get_int8(tds) : tds_get_int(tds);
 	tdsdump_log(TDS_DBG_FUNC, "                rows_affected = %" PRId64 "\n", rows_affected);

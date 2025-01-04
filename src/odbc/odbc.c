@@ -142,7 +142,7 @@ odbc_prret(SQLRETURN ret, char *unknown, size_t unknown_size)
 	case SQL_STILL_EXECUTING:	return "SQL_STILL_EXECUTING";
 	case SQL_NEED_DATA:		return "SQL_NEED_DATA";
 	}
-	
+
 	snprintf(unknown, unknown_size, "unknown: %d", (int)ret);
 
 	return unknown;
@@ -225,7 +225,7 @@ change_database(TDS_DBC * dbc, const char *database, int database_len)
 	TDSSOCKET *tds = dbc->tds_socket;
 	tds_mutex_check_owned(&dbc->mtx);
 
-	/* 
+	/*
 	 * We may not be connected yet and dbc->tds_socket
 	 * may not initialized.
 	 */
@@ -508,7 +508,7 @@ static SQLRETURN
 odbc_prepare(TDS_STMT *stmt)
 {
 	TDSSOCKET *tds = stmt->tds;
-	int in_row = 0;
+	bool in_row = false;
 
 	if (TDS_FAILED(tds_submit_prepare(tds, tds_dstr_cstr(&stmt->query), NULL, &stmt->dyn, stmt->params))) {
 		ODBC_SAFE_ERROR(stmt);
@@ -544,7 +544,7 @@ odbc_prepare(TDS_STMT *stmt)
 				stmt->row = 0;
 				stmt->row_count = TDS_NO_COUNT;
 				stmt->row_status = PRE_NORMAL_ROW;
-				in_row = 1;
+				in_row = true;
 				break;
 			}
 			continue;
@@ -681,7 +681,7 @@ SQLRETURN ODBC_API
 SQLBrowseConnect(SQLHDBC hdbc, SQLCHAR FAR * szConnStrIn, SQLSMALLINT cbConnStrIn, SQLCHAR FAR * szConnStrOut,
 		 SQLSMALLINT cbConnStrOutMax, SQLSMALLINT FAR * pcbConnStrOut)
 {
-	tdsdump_log(TDS_DBG_FUNC, "SQLBrowseConnect(%p, %s, %d, %p, %d, %p)\n", 
+	tdsdump_log(TDS_DBG_FUNC, "SQLBrowseConnect(%p, %s, %d, %p, %d, %p)\n",
 			hdbc, szConnStrIn, cbConnStrIn, szConnStrOut, cbConnStrOutMax, pcbConnStrOut);
 	ODBC_ENTER_HDBC;
 	odbc_errs_add(&dbc->errs, "HYC00", "SQLBrowseConnect: function not implemented");
@@ -713,7 +713,7 @@ SQLRETURN ODBC_API
 SQLDescribeParam(SQLHSTMT hstmt, SQLUSMALLINT ipar, SQLSMALLINT FAR * pfSqlType, SQLUINTEGER FAR * pcbParamDef,
 		 SQLSMALLINT FAR * pibScale, SQLSMALLINT FAR * pfNullable)
 {
-	tdsdump_log(TDS_DBG_FUNC, "SQLDescribeParam(%p, %d, %p, %p, %p, %p)\n", 
+	tdsdump_log(TDS_DBG_FUNC, "SQLDescribeParam(%p, %d, %p, %p, %p, %p)\n",
 			hstmt, ipar, pfSqlType, pcbParamDef, pibScale, pfNullable);
 	ODBC_ENTER_HSTMT;
 	odbc_errs_add(&stmt->errs, "HYC00", "SQLDescribeParam: function not implemented");
@@ -737,7 +737,7 @@ SQLExtendedFetch(SQLHSTMT hstmt, SQLUSMALLINT fFetchType, SQLROWOFFSET irow,
 
 	ODBC_ENTER_HSTMT;
 
-	tdsdump_log(TDS_DBG_FUNC, "SQLExtendedFetch(%p, %d, %d, %p, %p)\n", 
+	tdsdump_log(TDS_DBG_FUNC, "SQLExtendedFetch(%p, %d, %d, %p, %p)\n",
 			hstmt, fFetchType, (int)irow, pcrow, rgfRowStatus);
 
 	if (fFetchType != SQL_FETCH_NEXT && !stmt->dbc->cursor_support) {
@@ -762,7 +762,7 @@ SQLExtendedFetch(SQLHSTMT hstmt, SQLUSMALLINT fFetchType, SQLROWOFFSET irow,
 		irow = 0;
 		stmt->attr.fetch_bookmark_ptr = &bookmark;
 	}
-	
+
 	/* TODO errors are sligthly different ... perhaps it's better to leave DM do this job ?? */
 	/* TODO check fFetchType can be converted to USMALLINT */
 	ret = odbc_SQLFetch(stmt, fFetchType, irow);
@@ -902,9 +902,9 @@ SQLMoreResults(SQLHSTMT hstmt)
 	TDSSOCKET *tds;
 	TDS_INT result_type;
 	TDSRET tdsret;
-	int in_row = 0;
+	bool in_row = false;
 	SQLUSMALLINT param_status;
-	int token_flags;
+	unsigned int token_flags;
 
 	ODBC_ENTER_HSTMT;
 
@@ -925,7 +925,7 @@ SQLMoreResults(SQLHSTMT hstmt)
 		/* FIXME doesn't seem so fine ... - freddy77 */
 		tds_process_tokens(tds, &result_type, NULL, TDS_TOKEN_TRAILING);
 		stmt->row_status = IN_COMPUTE_ROW;
-		in_row = 1;
+		in_row = true;
 	}
 
 	param_status = SQL_PARAM_SUCCESS;
@@ -964,7 +964,7 @@ SQLMoreResults(SQLHSTMT hstmt)
 			/* skip this recordset */
 			case IN_COMPUTE_ROW:
 				/* TODO here we should set current_results to normal results */
-				in_row = 1;
+				in_row = true;
 				/* fall through */
 			/* in normal row, put in compute status */
 			case AFTER_COMPUTE_ROW:
@@ -1037,7 +1037,7 @@ SQLMoreResults(SQLHSTMT hstmt)
 			break;
 
 			/*
-			 * TODO test flags ? check error and change result ? 
+			 * TODO test flags ? check error and change result ?
 			 * see also other DONEINPROC handle (below)
 			 */
 		case TDS_DONEINPROC_RESULT:
@@ -1060,7 +1060,7 @@ SQLMoreResults(SQLHSTMT hstmt)
 			stmt->row_count = TDS_NO_COUNT;
 			/* we expect a row */
 			stmt->row_status = PRE_NORMAL_ROW;
-			in_row = 1;
+			in_row = true;
 			break;
 
 		case TDS_MSG_RESULT:
@@ -1068,7 +1068,7 @@ SQLMoreResults(SQLHSTMT hstmt)
 				tds_free_all_results(tds);
 				odbc_populate_ird(stmt);
 			}
-			in_row = 1;
+			in_row = true;
 			break;
 		}
 	}
@@ -1243,7 +1243,7 @@ SQLSetPos(SQLHSTMT hstmt, SQLSETPOSIROW irow, SQLUSMALLINT fOption, SQLUSMALLINT
 	TDSPARAMINFO *params = NULL;
 	ODBC_ENTER_HSTMT;
 
-	tdsdump_log(TDS_DBG_FUNC, "SQLSetPos(%p, %ld, %d, %d)\n", 
+	tdsdump_log(TDS_DBG_FUNC, "SQLSetPos(%p, %ld, %d, %d)\n",
 			hstmt, (long) irow, fOption, fLock);
 
 	if (!stmt->dbc->cursor_support) {
@@ -1374,7 +1374,7 @@ SQLGetEnvAttr(SQLHENV henv, SQLINTEGER Attribute, SQLPOINTER Value, SQLINTEGER B
 
 	ODBC_ENTER_HENV;
 
-	tdsdump_log(TDS_DBG_FUNC, "SQLGetEnvAttr(%p, %d, %p, %d, %p)\n", 
+	tdsdump_log(TDS_DBG_FUNC, "SQLGetEnvAttr(%p, %d, %p, %d, %p)\n",
 			henv, (int)Attribute, Value, (int)BufferLength, StringLength);
 
 	switch (Attribute) {
@@ -1616,7 +1616,7 @@ SQLRETURN ODBC_PUBLIC ODBC_API
 SQLBindParameter(SQLHSTMT hstmt, SQLUSMALLINT ipar, SQLSMALLINT fParamType, SQLSMALLINT fCType, SQLSMALLINT fSqlType,
 		 SQLULEN cbColDef, SQLSMALLINT ibScale, SQLPOINTER rgbValue, SQLLEN cbValueMax, SQLLEN FAR * pcbValue)
 {
-	tdsdump_log(TDS_DBG_FUNC, "SQLBindParameter(%p, %u, %d, %d, %d, %u, %d, %p, %d, %p)\n", 
+	tdsdump_log(TDS_DBG_FUNC, "SQLBindParameter(%p, %u, %d, %d, %d, %u, %d, %p, %d, %p)\n",
 		    hstmt, (unsigned)ipar, fParamType, fCType, (int)fSqlType, (unsigned)cbColDef, ibScale,
 		    rgbValue, (int)cbValueMax, pcbValue);
 	return odbc_SQLBindParameter(hstmt, ipar, fParamType, fCType, fSqlType, cbColDef, ibScale, rgbValue, cbValueMax, pcbValue);
@@ -1628,7 +1628,7 @@ SQLRETURN ODBC_PUBLIC ODBC_API
 SQLBindParam(SQLHSTMT hstmt, SQLUSMALLINT ipar, SQLSMALLINT fCType, SQLSMALLINT fSqlType, SQLULEN cbColDef, SQLSMALLINT ibScale,
 	     SQLPOINTER rgbValue, SQLLEN FAR * pcbValue)
 {
-	tdsdump_log(TDS_DBG_FUNC, "SQLBindParam(%p, %d, %d, %d, %u, %d, %p, %p)\n", 
+	tdsdump_log(TDS_DBG_FUNC, "SQLBindParam(%p, %d, %d, %d, %u, %d, %p, %p)\n",
 			hstmt, ipar, fCType, fSqlType, (unsigned)cbColDef, ibScale, rgbValue, pcbValue);
 	return odbc_SQLBindParameter(hstmt, ipar, SQL_PARAM_INPUT, fCType, fSqlType, cbColDef, ibScale, rgbValue, 0, pcbValue);
 }
@@ -1653,13 +1653,13 @@ SQLAllocHandle(SQLSMALLINT HandleType, SQLHANDLE InputHandle, SQLHANDLE * Output
 		return odbc_SQLAllocDesc(InputHandle, OutputHandle);
 		break;
 	}
-	
+
 	/*
-	 * As the documentation puts it, 
+	 * As the documentation puts it,
 	 *	"There is no handle with which to associate additional diagnostic information."
 	 *
-	 * The DM must catch HY092 because the driver has no valid handle at this early stage in which 
-	 * to store the error for later retrieval by the application.  
+	 * The DM must catch HY092 because the driver has no valid handle at this early stage in which
+	 * to store the error for later retrieval by the application.
 	 */
 	tdsdump_log(TDS_DBG_FUNC, "SQLAllocHandle(): invalid HandleType, error HY092: should be caught by DM\n");
 	return SQL_ERROR;
@@ -1938,7 +1938,7 @@ SQLBindCol(SQLHSTMT hstmt, SQLUSMALLINT icol, SQLSMALLINT fCType, SQLPOINTER rgb
 
 	ODBC_ENTER_HSTMT;
 
-	tdsdump_log(TDS_DBG_FUNC, "SQLBindCol(%p, %d, %d, %p, %d, %p)\n", 
+	tdsdump_log(TDS_DBG_FUNC, "SQLBindCol(%p, %d, %d, %p, %d, %p)\n",
 			hstmt, icol, fCType, rgbValue, (int)cbValueMax, pcbValue);
 
 	/* TODO - More error checking XXX smurph */
@@ -1995,7 +1995,7 @@ SQLCancel(SQLHSTMT hstmt)
 	TDSSOCKET *tds;
 
 	/*
-	 * FIXME this function can be called from other thread, do not free 
+	 * FIXME this function can be called from other thread, do not free
 	 * errors for this function
 	 * If function is called from another thread errors are not touched
 	 */
@@ -2008,11 +2008,12 @@ SQLCancel(SQLHSTMT hstmt)
 
 	tds = stmt->tds;
 
-	/* cancelling an inactive statement ?? */
-	if (!tds) {
-		ODBC_SAFE_ERROR(stmt);
-		ODBC_EXIT_(stmt);
-	}
+	/* cancelling an inactive statement */
+	if (!tds)
+		/* Just return success */
+		/* Note that we don't own locks so don't use ODBC_EXIT here. */
+		return SQL_SUCCESS;
+
 	if (tds_mutex_trylock(&stmt->mtx) == 0) {
 		CHECK_STMT_EXTRA(stmt);
 		odbc_errs_reset(&stmt->errs);
@@ -2399,7 +2400,7 @@ SQLRETURN ODBC_PUBLIC ODBC_API
 SQLColAttributes(SQLHSTMT hstmt, SQLUSMALLINT icol, SQLUSMALLINT fDescType,
 		 SQLPOINTER rgbDesc, SQLSMALLINT cbDescMax, SQLSMALLINT FAR * pcbDesc, SQLLEN FAR * pfDesc)
 {
-	tdsdump_log(TDS_DBG_FUNC, "SQLColAttributes(%p, %d, %d, %p, %d, %p, %p)\n", 
+	tdsdump_log(TDS_DBG_FUNC, "SQLColAttributes(%p, %d, %d, %p, %d, %p, %p)\n",
 			hstmt, icol, fDescType, rgbDesc, cbDescMax, pcbDesc, pfDesc);
 
 	return odbc_SQLColAttribute(hstmt, icol, fDescType, rgbDesc, cbDescMax, pcbDesc, pfDesc _wide0);
@@ -2532,7 +2533,7 @@ odbc_errmsg_handler(const TDSCONTEXT * ctx, TDSSOCKET * tds, TDSMESSAGE * msg)
 			odbc_errs_add_rdbms(errs, msg->msgno, state, msg->message, msg->line_number, msg->severity,
 					    msg->server, stmt ? stmt->curr_param_row + 1 : 0);
 
-		/* set lastc according */
+		/* set lastrc according */
 		if (severity <= 10) {
 			if (errs->lastrc == SQL_SUCCESS)
 				errs->lastrc = SQL_SUCCESS_WITH_INFO;
@@ -2561,7 +2562,7 @@ SQLSetDescRec(SQLHDESC hdesc, SQLSMALLINT nRecordNumber, SQLSMALLINT nType, SQLS
 
 	ODBC_ENTER_HDESC;
 
-	tdsdump_log(TDS_DBG_FUNC, "SQLSetDescRec(%p, %d, %d, %d, %d, %d, %d, %p, %p, %p)\n", 
+	tdsdump_log(TDS_DBG_FUNC, "SQLSetDescRec(%p, %d, %d, %d, %d, %d, %d, %p, %p, %p)\n",
 		    hdesc, nRecordNumber, nType, nSubType, (int)nLength, nPrecision, nScale,
 		    pData, pnStringLength, pnIndicator);
 
@@ -3108,7 +3109,7 @@ SQLCopyDesc(SQLHDESC hsrc, SQLHDESC hdesc)
 
 	ODBC_ENTER_HDESC;
 
-	tdsdump_log(TDS_DBG_FUNC, "SQLCopyDesc(%p, %p)\n", 
+	tdsdump_log(TDS_DBG_FUNC, "SQLCopyDesc(%p, %p)\n",
 			hsrc, hdesc);
 
 	/* check source descriptor handle, destination one was already checked */
@@ -3231,7 +3232,7 @@ odbc_populate_ird(TDS_STMT * stmt)
 		drec->sql_desc_case_sensitive = SQL_TRUE;
 
 		/*
-		 * TODO how to handle when in datetime we change precision ?? 
+		 * TODO how to handle when in datetime we change precision ??
 		 * should we change display size too ??
 		 * is formatting function correct ??
 		 * we should not convert to string with invalid precision!
@@ -3427,7 +3428,7 @@ odbc_SQLExecute(TDS_STMT * stmt)
 	TDSSOCKET *tds;
 	TDS_INT result_type;
 	TDS_INT done = 0;
-	int in_row = 0;
+	bool in_row = false;
 	SQLUSMALLINT param_status;
 	int found_info = 0, found_error = 0;
 	TDS_INT8 total_rows = TDS_NO_COUNT;
@@ -3437,7 +3438,7 @@ odbc_SQLExecute(TDS_STMT * stmt)
 			stmt);
 
 	stmt->row = 0;
-		
+
 
 	/* check parameters are all OK */
 	if (stmt->params && stmt->param_num <= stmt->param_count) {
@@ -3653,7 +3654,7 @@ odbc_SQLExecute(TDS_STMT * stmt)
 			stmt->row = 0;
 			stmt->row_count = TDS_NO_COUNT;
 			stmt->row_status = PRE_NORMAL_ROW;
-			in_row = 1;
+			in_row = true;
 			break;
 		}
 		if (done)
@@ -3777,7 +3778,7 @@ odbc_process_tokens(TDS_STMT * stmt, unsigned flag)
 	for (;;) {
 		TDSRET retcode = tds_process_tokens(tds, &result_type, &done_flags, flag);
 		tdsdump_log(TDS_DBG_FUNC, "odbc_process_tokens: tds_process_tokens returned %d\n", retcode);
-		tdsdump_log(TDS_DBG_FUNC, "    result_type=%d, TDS_DONE_COUNT=%x, TDS_DONE_ERROR=%x\n", 
+		tdsdump_log(TDS_DBG_FUNC, "    result_type=%d, TDS_DONE_COUNT=%x, TDS_DONE_ERROR=%x\n",
 						result_type, (done_flags & TDS_DONE_COUNT), (done_flags & TDS_DONE_ERROR));
 		switch (retcode) {
 		case TDS_SUCCESS:
@@ -3823,7 +3824,7 @@ odbc_process_tokens(TDS_STMT * stmt, unsigned flag)
 				tdsdump_log(TDS_DBG_FUNC, "odbc_process_tokens: row_count=%" PRId64 "\n", stmt->row_count);
 				return result_type;
 			}
-			tdsdump_log(TDS_DBG_FUNC, "odbc_process_tokens: processed %s\n", 
+			tdsdump_log(TDS_DBG_FUNC, "odbc_process_tokens: processed %s\n",
 					result_type==TDS_DONE_RESULT? "TDS_DONE_RESULT" : "TDS_DONEPROC_RESULT");
 			break;
 
@@ -3890,6 +3891,74 @@ odbc_fix_data_type_col(TDS_STMT *stmt, int idx)
 	}
 }
 
+static SQLUSMALLINT
+copy_row(TDS_STMT * const stmt, const SQLLEN row_offset, const SQLULEN curr_row)
+{
+	const TDS_DESC *const ard = stmt->ard;
+	TDSRESULTINFO *const resinfo = stmt->tds->current_results;
+	int i;
+	bool truncated = false;
+
+#define AT_ROW(ptr, type) (row_offset ? (type*)(((char*)(ptr)) + row_offset) : &ptr[curr_row])
+
+	for (i = 0; i < resinfo->num_cols; i++) {
+		TDSCOLUMN *colinfo;
+		struct _drecord *drec_ard;
+		SQLLEN len;
+
+		colinfo = resinfo->columns[i];
+		colinfo->column_text_sqlgetdatapos = 0;
+		colinfo->column_iconv_left = 0;
+		drec_ard = (i < ard->header.sql_desc_count) ? &ard->records[i] : NULL;
+		if (!drec_ard)
+			continue;
+		if (colinfo->column_cur_size < 0) {
+			if (drec_ard->sql_desc_indicator_ptr) {
+				*AT_ROW(drec_ard->sql_desc_indicator_ptr, SQLLEN) = SQL_NULL_DATA;
+			} else if (drec_ard->sql_desc_data_ptr) {
+				odbc_errs_add(&stmt->errs, "22002", NULL);
+				return SQL_ROW_ERROR;
+			}
+			continue;
+		}
+		/* set indicator to 0 if data is not null */
+		if (drec_ard->sql_desc_indicator_ptr)
+			*AT_ROW(drec_ard->sql_desc_indicator_ptr, SQLLEN) = 0;
+
+		/* TODO what happen to length if no data is returned (drec->sql_desc_data_ptr == NULL) ?? */
+		len = 0;
+		if (drec_ard->sql_desc_data_ptr) {
+			int c_type;
+			TDS_CHAR *data_ptr = (TDS_CHAR *) drec_ard->sql_desc_data_ptr;
+
+			colinfo->column_text_sqlgetdatapos = 0;
+			colinfo->column_iconv_left = 0;
+			c_type = drec_ard->sql_desc_concise_type;
+			if (c_type == SQL_C_DEFAULT)
+				c_type = odbc_sql_to_c_type_default(stmt->ird->records[i].sql_desc_concise_type);
+			if (row_offset || curr_row == 0) {
+				data_ptr += row_offset;
+			} else {
+				data_ptr += odbc_get_octet_len(c_type, drec_ard) * curr_row;
+			}
+			len = odbc_tds2sql_col(stmt, colinfo, c_type, data_ptr, drec_ard->sql_desc_octet_length, drec_ard);
+			if (len == SQL_NULL_DATA)
+				return SQL_ROW_ERROR;
+
+			if ((c_type == SQL_C_CHAR && len >= drec_ard->sql_desc_octet_length)
+			    || (c_type == SQL_C_BINARY && len > drec_ard->sql_desc_octet_length)) {
+				truncated = true;
+				stmt->errs.lastrc = SQL_SUCCESS_WITH_INFO;
+			}
+		}
+		if (drec_ard->sql_desc_octet_length_ptr)
+			*AT_ROW(drec_ard->sql_desc_octet_length_ptr, SQLLEN) = len;
+	}
+
+	return truncated ? SQL_ROW_SUCCESS_WITH_INFO : SQL_ROW_SUCCESS;
+#undef AT_ROW
+}
+
 /*
  * - handle correctly SQLGetData (for forward cursors accept only row_size == 1
  *   for other types application must use SQLSetPos)
@@ -3901,26 +3970,20 @@ odbc_SQLFetch(TDS_STMT * stmt, SQLSMALLINT FetchOrientation, SQLLEN FetchOffset)
 {
 	TDSSOCKET *tds;
 	TDSRESULTINFO *resinfo;
-	TDSCOLUMN *colinfo;
 	int i;
 	SQLULEN curr_row, num_rows;
-	SQLINTEGER len = 0;
-	struct _drecord *drec_ard;
-	TDS_DESC *ard;
+	const TDS_DESC *const ard = stmt->ard;
 	SQLULEN dummy, *fetched_ptr;
-	SQLUSMALLINT *status_ptr, row_status;
+	SQLUSMALLINT *status_ptr, row_status = SQL_ROW_SUCCESS;
 	TDS_INT result_type;
-	int truncated = 0;
+	bool truncated = false;
 
-#define AT_ROW(ptr, type) (row_offset ? (type*)(((char*)(ptr)) + row_offset) : &ptr[curr_row])
 	SQLLEN row_offset = 0;
 
 	tdsdump_log(TDS_DBG_FUNC, "odbc_SQLFetch(%p, %d, %d)\n", stmt, (int)FetchOrientation, (int)FetchOffset);
 
-	if (stmt->ard->header.sql_desc_bind_type != SQL_BIND_BY_COLUMN && stmt->ard->header.sql_desc_bind_offset_ptr)
-		row_offset = *stmt->ard->header.sql_desc_bind_offset_ptr;
-
-	ard = stmt->ard;
+	if (ard->header.sql_desc_bind_type != SQL_BIND_BY_COLUMN && ard->header.sql_desc_bind_offset_ptr)
+		row_offset = *ard->header.sql_desc_bind_offset_ptr;
 
 	tds = stmt->tds;
 	num_rows = ard->header.sql_desc_array_size;
@@ -4040,8 +4103,8 @@ odbc_SQLFetch(TDS_STMT * stmt, SQLSMALLINT FetchOrientation, SQLLEN FetchOffset)
 #if 0
 				stmt->row_count = tds->rows_affected;
 #endif
-				/* 
-				 * NOTE do not set row_status to NOT_IN_ROW, 
+				/*
+				 * NOTE do not set row_status to NOT_IN_ROW,
 				 * if compute tds_process_tokens above returns TDS_NO_MORE_RESULTS
 				 */
 				stmt->row_status = PRE_NORMAL_ROW;
@@ -4089,57 +4152,9 @@ odbc_SQLFetch(TDS_STMT * stmt, SQLSMALLINT FetchOrientation, SQLLEN FetchOffset)
 
 		/* we got a row, return a row readed even if error (for ODBC specifications) */
 		++(*fetched_ptr);
-		for (i = 0; i < resinfo->num_cols; i++) {
-			colinfo = resinfo->columns[i];
-			colinfo->column_text_sqlgetdatapos = 0;
-			colinfo->column_iconv_left = 0;
-			drec_ard = (i < ard->header.sql_desc_count) ? &ard->records[i] : NULL;
-			if (!drec_ard)
-				continue;
-			if (colinfo->column_cur_size < 0) {
-				if (drec_ard->sql_desc_indicator_ptr) {
-					*AT_ROW(drec_ard->sql_desc_indicator_ptr, SQLLEN) = SQL_NULL_DATA;
-				} else if (drec_ard->sql_desc_data_ptr) {
-					odbc_errs_add(&stmt->errs, "22002", NULL);
-					row_status = SQL_ROW_ERROR;
-					break;
-				}
-				continue;
-			}
-			/* set indicator to 0 if data is not null */
-			if (drec_ard->sql_desc_indicator_ptr)
-				*AT_ROW(drec_ard->sql_desc_indicator_ptr, SQLLEN) = 0;
-
-			/* TODO what happen to length if no data is returned (drec->sql_desc_data_ptr == NULL) ?? */
-			len = 0;
-			if (drec_ard->sql_desc_data_ptr) {
-				int c_type;
-				TDS_CHAR *data_ptr = (TDS_CHAR *) drec_ard->sql_desc_data_ptr;
-
-				colinfo->column_text_sqlgetdatapos = 0;
-				colinfo->column_iconv_left = 0;
-				c_type = drec_ard->sql_desc_concise_type;
-				if (c_type == SQL_C_DEFAULT)
-					c_type = odbc_sql_to_c_type_default(stmt->ird->records[i].sql_desc_concise_type);
-				if (row_offset || curr_row == 0) {
-					data_ptr += row_offset;
-				} else {
-					data_ptr += odbc_get_octet_len(c_type, drec_ard) * curr_row;
-				}
-				len = odbc_tds2sql_col(stmt, colinfo, c_type, data_ptr, drec_ard->sql_desc_octet_length, drec_ard);
-				if (len == SQL_NULL_DATA) {
-					row_status = SQL_ROW_ERROR;
-					break;
-				}
-				if ((c_type == SQL_C_CHAR && len >= drec_ard->sql_desc_octet_length)
-				    || (c_type == SQL_C_BINARY && len > drec_ard->sql_desc_octet_length)) {
-					truncated = 1;
-					stmt->errs.lastrc = SQL_SUCCESS_WITH_INFO;
-				}
-			}
-			if (drec_ard->sql_desc_octet_length_ptr)
-				*AT_ROW(drec_ard->sql_desc_octet_length_ptr, SQLLEN) = len;
-		}
+		row_status = copy_row(stmt, row_offset, curr_row);
+		if (row_status == SQL_ROW_SUCCESS_WITH_INFO)
+			truncated = true;
 
 		if (status_ptr)
 			*status_ptr++ = truncated ? SQL_ROW_ERROR : row_status;
@@ -4148,9 +4163,9 @@ odbc_SQLFetch(TDS_STMT * stmt, SQLSMALLINT FetchOrientation, SQLLEN FetchOffset)
 			break;
 		}
 #if SQL_BIND_BY_COLUMN != 0
-		if (stmt->ard->header.sql_desc_bind_type != SQL_BIND_BY_COLUMN)
+		if (ard->header.sql_desc_bind_type != SQL_BIND_BY_COLUMN)
 #endif
-			row_offset += stmt->ard->header.sql_desc_bind_type;
+			row_offset += ard->header.sql_desc_bind_type;
 	} while (++curr_row < num_rows);
 
 	if (truncated)
@@ -4178,7 +4193,7 @@ SQLFetch(SQLHSTMT hstmt)
 		SQLULEN *rows_processed_ptr;
 		SQLUSMALLINT *array_status_ptr;
 	} keep;
-	
+
 	ODBC_ENTER_HSTMT;
 
 	tdsdump_log(TDS_DBG_FUNC, "SQLFetch(%p)\n", hstmt);
@@ -4186,7 +4201,7 @@ SQLFetch(SQLHSTMT hstmt)
 	keep.array_size = stmt->ard->header.sql_desc_array_size;
 	keep.rows_processed_ptr = stmt->ird->header.sql_desc_rows_processed_ptr;
 	keep.array_status_ptr = stmt->ird->header.sql_desc_array_status_ptr;
-	
+
 	if (stmt->dbc->env->attr.odbc_version != SQL_OV_ODBC3) {
 		stmt->ard->header.sql_desc_array_size = 1;
 		stmt->ird->header.sql_desc_rows_processed_ptr = NULL;
@@ -4660,7 +4675,7 @@ odbc_SQLGetStmtAttr(SQLHSTMT hstmt, SQLINTEGER Attribute, SQLPOINTER Value,
 SQLRETURN ODBC_PUBLIC ODBC_API
 SQLGetStmtAttr(SQLHSTMT hstmt, SQLINTEGER Attribute, SQLPOINTER Value, SQLINTEGER BufferLength, SQLINTEGER * StringLength)
 {
-	tdsdump_log(TDS_DBG_FUNC, "SQLGetStmtAttr(%p, %d, %p, %d, %p)\n", 
+	tdsdump_log(TDS_DBG_FUNC, "SQLGetStmtAttr(%p, %d, %p, %d, %p)\n",
 			hstmt, (int)Attribute, Value, (int)BufferLength, StringLength);
 
 	return odbc_SQLGetStmtAttr(hstmt, Attribute, Value, BufferLength, StringLength _wide0);
@@ -4681,7 +4696,7 @@ SQLGetStmtAttrW(SQLHSTMT hstmt, SQLINTEGER Attribute, SQLPOINTER Value, SQLINTEG
 SQLRETURN ODBC_PUBLIC ODBC_API
 SQLGetStmtOption(SQLHSTMT hstmt, SQLUSMALLINT fOption, SQLPOINTER pvParam)
 {
-	tdsdump_log(TDS_DBG_FUNC, "SQLGetStmtOption(%p, %d, %p)\n", 
+	tdsdump_log(TDS_DBG_FUNC, "SQLGetStmtOption(%p, %d, %p)\n",
 			hstmt, fOption, pvParam);
 
 	return odbc_SQLGetStmtAttr(hstmt, (SQLINTEGER) fOption, pvParam, SQL_MAX_OPTION_STRING_LENGTH, NULL _wide0);
@@ -4692,7 +4707,7 @@ SQLNumResultCols(SQLHSTMT hstmt, SQLSMALLINT FAR * pccol)
 {
 	ODBC_ENTER_HSTMT;
 
-	tdsdump_log(TDS_DBG_FUNC, "SQLNumResultCols(%p, %p)\n", 
+	tdsdump_log(TDS_DBG_FUNC, "SQLNumResultCols(%p, %p)\n",
 			hstmt, pccol);
 
 	/*
@@ -4746,7 +4761,7 @@ ODBC_FUNC(SQLPrepare, (P(SQLHSTMT,hstmt), PCHARIN(SqlStr,SQLINTEGER) WIDE))
 		stmt->need_reprepare = 0;
 		/*
 		 * using TDS7+ we need parameters to prepare a query so try
-		 * to get them 
+		 * to get them
 		 * TDS5 do not need parameters type and we have always to
 		 * prepare sepatately so this is not an issue
 		 */
@@ -4767,7 +4782,7 @@ ODBC_FUNC(SQLPrepare, (P(SQLHSTMT,hstmt), PCHARIN(SqlStr,SQLINTEGER) WIDE))
 #if TDS_NO_COUNT != -1
 # error TDS_NO_COUNT != -1
 #endif
-	
+
 SQLRETURN
 odbc_SQLRowCount(SQLHSTMT hstmt, SQLLEN FAR * pcrow)
 {
@@ -4922,7 +4937,7 @@ SQLRETURN ODBC_PUBLIC ODBC_API
 SQLSetParam(SQLHSTMT hstmt, SQLUSMALLINT ipar, SQLSMALLINT fCType, SQLSMALLINT fSqlType, SQLULEN cbParamDef,
 	    SQLSMALLINT ibScale, SQLPOINTER rgbValue, SQLLEN FAR * pcbValue)
 {
-	tdsdump_log(TDS_DBG_FUNC, "SQLSetParam(%p, %d, %d, %d, %u, %d, %p, %p)\n", 
+	tdsdump_log(TDS_DBG_FUNC, "SQLSetParam(%p, %d, %d, %d, %u, %d, %p, %p)\n",
 			hstmt, ipar, fCType, fSqlType, (unsigned)cbParamDef, ibScale, rgbValue, pcbValue);
 
 	return odbc_SQLBindParameter(hstmt, ipar, SQL_PARAM_INPUT_OUTPUT, fCType, fSqlType, cbParamDef, ibScale, rgbValue,
@@ -4936,11 +4951,11 @@ SQLSetParam(SQLHSTMT hstmt, SQLUSMALLINT ipar, SQLSMALLINT fCType, SQLSMALLINT f
  * mapped to a call to sp_columns which - lucky for us - returns
  * the exact result set we need.
  *
- * exec sp_columns [ @table_name = ] object 
- *                 [ , [ @table_owner = ] owner ] 
- *                 [ , [ @table_qualifier = ] qualifier ] 
- *                 [ , [ @column_name = ] column ] 
- *                 [ , [ @ODBCVer = ] ODBCVer ] 
+ * exec sp_columns [ @table_name = ] object
+ *                 [ , [ @table_owner = ] owner ]
+ *                 [ , [ @table_qualifier = ] qualifier ]
+ *                 [ , [ @column_name = ] column ]
+ *                 [ , [ @ODBCVer = ] ODBCVer ]
  *
  */
 ODBC_FUNC(SQLColumns, (P(SQLHSTMT,hstmt), PCHARIN(CatalogName,SQLSMALLINT),	/* object_qualifier */
@@ -5076,7 +5091,7 @@ SQLGetData(SQLHSTMT hstmt, SQLUSMALLINT icol, SQLSMALLINT fCType, SQLPOINTER rgb
 
 	ODBC_ENTER_HSTMT;
 
-	tdsdump_log(TDS_DBG_FUNC, "SQLGetData(%p, %u, %d, %p, %d, %p)\n", 
+	tdsdump_log(TDS_DBG_FUNC, "SQLGetData(%p, %u, %d, %p, %d, %p)\n",
 			hstmt, icol, fCType, rgbValue, (int)cbValueMax, pcbValue);
 
 	if (cbValueMax < 0) {
@@ -5086,8 +5101,8 @@ SQLGetData(SQLHSTMT hstmt, SQLUSMALLINT icol, SQLSMALLINT fCType, SQLPOINTER rgb
 
 	/* read data from TDS only if current statement */
 	if ((stmt->cursor == NULL && !stmt->tds)
-		|| stmt->row_status == PRE_NORMAL_ROW 
-		|| stmt->row_status == NOT_IN_ROW) 
+		|| stmt->row_status == PRE_NORMAL_ROW
+		|| stmt->row_status == NOT_IN_ROW)
 	{
 		odbc_errs_add(&stmt->errs, "24000", NULL);
 		ODBC_EXIT_(stmt);
@@ -5138,7 +5153,7 @@ SQLGetData(SQLHSTMT hstmt, SQLUSMALLINT icol, SQLSMALLINT fCType, SQLPOINTER rgb
 		*pcbValue = odbc_tds2sql_col(stmt, colinfo, fCType, (TDS_CHAR *) rgbValue, cbValueMax, NULL);
 		if (*pcbValue == SQL_NULL_DATA)
 			ODBC_EXIT(stmt, SQL_ERROR);
-		
+
 		if (is_variable_type(colinfo->column_type)
 		    && (fCType == SQL_C_CHAR || fCType == SQL_C_WCHAR || fCType == SQL_C_BINARY)) {
 			/* avoid infinite SQL_SUCCESS on empty strings */
@@ -5563,7 +5578,7 @@ odbc_SQLGetInfo(TDS_DBC * dbc, SQLUSMALLINT fInfoType, SQLPOINTER rgbInfoValue, 
 		break;
 	case SQL_DATA_SOURCE_READ_ONLY:
 		/*
-		 * TODO: determine the right answer from connection 
+		 * TODO: determine the right answer from connection
 		 * attribute SQL_ATTR_ACCESS_MODE
 		 */
 		p = "N";	/* false, writable */
@@ -5603,8 +5618,17 @@ odbc_SQLGetInfo(TDS_DBC * dbc, SQLUSMALLINT fInfoType, SQLPOINTER rgbInfoValue, 
 	case SQL_DRIVER_HENV:
 		ULVAL = (SQLULEN) dbc->env;
 		break;
-	case SQL_DRIVER_HSTMT:
-		ULVAL = (SQLULEN) dbc->current_statement;
+	case SQL_DRIVER_HSTMT: {
+			void *ptr = *((void**) rgbInfoValue);
+			if (SQL_NULL_HSTMT != ptr && !IS_HSTMT(ptr))
+				ULVAL = SQL_NULL_HSTMT;
+		}
+		break;
+	case SQL_DRIVER_HDESC: {
+			void *ptr = *((void**) rgbInfoValue);
+			if (SQL_NULL_HDESC != ptr && !IS_HDESC(ptr))
+				ULVAL = SQL_NULL_HDESC;
+		}
 		break;
 	case SQL_DRIVER_NAME:	/* ODBC 2.0 */
 		p = "libtdsodbc.so";
@@ -5648,7 +5672,7 @@ odbc_SQLGetInfo(TDS_DBC * dbc, SQLUSMALLINT fInfoType, SQLPOINTER rgbInfoValue, 
 		/* TODO cursors */
 		/* Cursors not supported yet */
 		/*
-		 * Should be SQL_CA2_LOCK_CONCURRENCY SQL_CA2_MAX_ROWS_CATALOG SQL_CA2_MAX_ROWS_DELETE 
+		 * Should be SQL_CA2_LOCK_CONCURRENCY SQL_CA2_MAX_ROWS_CATALOG SQL_CA2_MAX_ROWS_DELETE
  		 * SQL_CA2_MAX_ROWS_INSERT SQL_CA2_MAX_ROWS_SELECT SQL_CA2_MAX_ROWS_UPDATE SQL_CA2_OPT_ROWVER_CONCURRENCY
  		 * SQL_CA2_OPT_VALUES_CONCURRENCY SQL_CA2_READ_ONLY_CONCURRENCY SQL_CA2_SENSITIVITY_ADDITIONS
  		 * SQL_CA2_SENSITIVITY_UPDATES SQL_CA2_SIMULATE_UNIQUE
@@ -5682,7 +5706,7 @@ odbc_SQLGetInfo(TDS_DBC * dbc, SQLUSMALLINT fInfoType, SQLPOINTER rgbInfoValue, 
 		/* TODO cursors */
 		/* Cursors not supported yet */
 		/*
-		 * Should be SQL_CA2_LOCK_CONCURRENCY SQL_CA2_MAX_ROWS_CATALOG SQL_CA2_MAX_ROWS_DELETE 
+		 * Should be SQL_CA2_LOCK_CONCURRENCY SQL_CA2_MAX_ROWS_CATALOG SQL_CA2_MAX_ROWS_DELETE
  		 * SQL_CA2_MAX_ROWS_INSERT SQL_CA2_MAX_ROWS_SELECT SQL_CA2_MAX_ROWS_UPDATE SQL_CA2_OPT_ROWVER_CONCURRENCY
  		 * SQL_CA2_OPT_VALUES_CONCURRENCY SQL_CA2_READ_ONLY_CONCURRENCY
 		 */
@@ -6093,7 +6117,7 @@ SQLGetInfo(SQLHDBC hdbc, SQLUSMALLINT fInfoType, SQLPOINTER rgbInfoValue, SQLSMA
 {
 	ODBC_ENTER_HDBC;
 
-	tdsdump_log(TDS_DBG_FUNC, "SQLGetInfo(%p, %d, %p, %d, %p)\n", 
+	tdsdump_log(TDS_DBG_FUNC, "SQLGetInfo(%p, %d, %p, %d, %p)\n",
 			hdbc, fInfoType, rgbInfoValue, cbInfoValueMax, pcbInfoValue);
 
 	ODBC_EXIT(dbc, odbc_SQLGetInfo(dbc, fInfoType, rgbInfoValue, cbInfoValueMax, pcbInfoValue _wide0));
@@ -6317,19 +6341,19 @@ SQLGetTypeInfoW(SQLHSTMT hstmt, SQLSMALLINT fSqlType)
 }
 #endif
 
-static SQLRETURN 
+static SQLRETURN
 odbc_SQLParamData(SQLHSTMT hstmt, SQLPOINTER FAR * prgbValue)
 {
 	ODBC_ENTER_HSTMT;
 
-	tdsdump_log(TDS_DBG_FUNC, "SQLParamData(%p, %p) [param_num %d, param_data_called = %d]\n", 
+	tdsdump_log(TDS_DBG_FUNC, "SQLParamData(%p, %p) [param_num %d, param_data_called = %d]\n",
 					hstmt, prgbValue, stmt->param_num, stmt->param_data_called);
 
 	if (stmt->params && stmt->param_num <= stmt->param_count) {
 		SQLRETURN res;
 
 		if (stmt->param_num <= 0 || stmt->param_num > stmt->apd->header.sql_desc_count) {
-			tdsdump_log(TDS_DBG_FUNC, "SQLParamData: logic_error: parameter out of bounds: 0 <= %d < %d\n", 
+			tdsdump_log(TDS_DBG_FUNC, "SQLParamData: logic_error: parameter out of bounds: 0 <= %d < %d\n",
 						   stmt->param_num, stmt->apd->header.sql_desc_count);
 			ODBC_EXIT(stmt, SQL_ERROR);
 		}
@@ -6365,9 +6389,9 @@ SQLParamData(SQLHSTMT hstmt, SQLPOINTER FAR * prgbValue)
 {
 	ODBC_PRRET_BUF;
 	SQLRETURN ret = odbc_SQLParamData(hstmt, prgbValue);
-	
+
 	tdsdump_log(TDS_DBG_FUNC, "SQLParamData returns %s\n", odbc_prret(ret));
-	
+
 	return ret;
 }
 
@@ -6385,7 +6409,7 @@ SQLPutData(SQLHSTMT hstmt, SQLPOINTER rgbValue, SQLLEN cbValue)
 		/* TODO do some more tests before setting this flag */
 		stmt->param_data_called = 1;
 		ret = continue_parse_prepared_query(stmt, rgbValue, cbValue);
-		tdsdump_log(TDS_DBG_FUNC, "SQLPutData returns %s, %d bytes left\n", 
+		tdsdump_log(TDS_DBG_FUNC, "SQLPutData returns %s, %d bytes left\n",
 					  odbc_prret(ret), curcol->column_size - curcol->column_cur_size);
 		ODBC_EXIT(stmt, ret);
 	}
@@ -6506,6 +6530,16 @@ ODBC_FUNC(SQLSetConnectAttr, (P(SQLHDBC,hdbc), P(SQLINTEGER,Attribute), P(SQLPOI
 		}
 		break;
 #endif
+	case SQL_COPT_TDSODBC_IMPL_BCP_CONTROL_OLD:
+		if (!ValuePtr)
+			odbc_errs_add(&dbc->errs, "HY009", NULL);
+		else {
+			const struct tdsodbc_impl_bcp_control_params *params =
+				(const struct tdsodbc_impl_bcp_control_params*)ValuePtr;
+			const int field = params->field == BCPHINTS_OLD ? BCPHINTSA : params->field;
+			odbc_bcp_control(dbc, field, params->value);
+		}
+		break;
 	case SQL_COPT_TDSODBC_IMPL_BCP_CONTROL:
 		if (!ValuePtr)
 			odbc_errs_add(&dbc->errs, "HY009", NULL);
@@ -6906,7 +6940,7 @@ odbc_SQLSetStmtAttr(SQLHSTMT hstmt, SQLINTEGER Attribute, SQLPOINTER ValuePtr, S
 SQLRETURN ODBC_PUBLIC ODBC_API
 SQLSetStmtAttr(SQLHSTMT hstmt, SQLINTEGER Attribute, SQLPOINTER ValuePtr, SQLINTEGER StringLength)
 {
-	tdsdump_log(TDS_DBG_FUNC, "SQLSetStmtAttr(%p, %d, %p, %d)\n", 
+	tdsdump_log(TDS_DBG_FUNC, "SQLSetStmtAttr(%p, %d, %p, %d)\n",
 			hstmt, (int)Attribute, ValuePtr, (int)StringLength);
 
 	return odbc_SQLSetStmtAttr(hstmt, Attribute, ValuePtr, StringLength _wide0);
@@ -6942,7 +6976,7 @@ ODBC_FUNC(SQLSpecialColumns, (P(SQLHSTMT,hstmt), P(SQLUSMALLINT,fColType), PCHAR
 
 	ODBC_ENTER_HSTMT;
 
-	tdsdump_log(TDS_DBG_FUNC, "SQLSpecialColumns(%p, %d, %p, %d, %p, %d, %p, %d, %d, %d)\n", 
+	tdsdump_log(TDS_DBG_FUNC, "SQLSpecialColumns(%p, %d, %p, %d, %p, %d, %p, %d, %d, %d)\n",
 		    hstmt, fColType, szCatalogName, cbCatalogName, szSchemaName, cbSchemaName, szTableName, cbTableName,
 		    fScope, fNullable);
 
@@ -7020,7 +7054,7 @@ ODBC_FUNC(SQLStatistics, (P(SQLHSTMT,hstmt), PCHARIN(CatalogName,SQLSMALLINT),
 
 	ODBC_ENTER_HSTMT;
 
-	tdsdump_log(TDS_DBG_FUNC, "SQLStatistics(%p, %p, %d, %p, %d, %p, %d, %d, %d)\n", 
+	tdsdump_log(TDS_DBG_FUNC, "SQLStatistics(%p, %p, %d, %p, %d, %p, %d, %d, %d)\n",
 		    hstmt, szCatalogName, cbCatalogName, szSchemaName, cbSchemaName, szTableName, cbTableName,
 		    fUnique, fAccuracy);
 
@@ -7086,7 +7120,7 @@ ODBC_FUNC(SQLTables, (P(SQLHSTMT,hstmt), PCHARIN(CatalogName,SQLSMALLINT),
 
 	ODBC_ENTER_HSTMT;
 
-	tdsdump_log(TDS_DBG_FUNC, "SQLTables(%p, %p, %d, %p, %d, %p, %d, %p, %d)\n", 
+	tdsdump_log(TDS_DBG_FUNC, "SQLTables(%p, %p, %d, %p, %d, %p, %d, %p, %d)\n",
 		    hstmt, szCatalogName, cbCatalogName, szSchemaName, cbSchemaName, szTableName, cbTableName,
 		    szTableType, cbTableType);
 
@@ -7222,13 +7256,13 @@ memory_error:
 	ODBC_EXIT_(stmt);
 }
 
-/** 
+/**
  * Log a useful message about unimplemented options
  * Defying belief, Microsoft defines mutually exclusive options that
- * some ODBC implementations #define as duplicate values (meaning, of course, 
- * that they couldn't be implemented in the same function because they're 
- * indistinguishable.  
- * 
+ * some ODBC implementations #define as duplicate values (meaning, of course,
+ * that they couldn't be implemented in the same function because they're
+ * indistinguishable.
+ *
  * Those duplicates are commented out below.
  */
 static void
@@ -7276,10 +7310,6 @@ odbc_log_unimplemented_type(const char function_name[], int fType)
 	case SQL_DM_VER:
 		name = "SQL_DM_VER";
 		category = "Added for ODBC 3.x";
-		break;
-	case SQL_DRIVER_HDESC:
-		name = "SQL_DRIVER_HDESC";
-		category = "Driver Information";
 		break;
 	case SQL_DRIVER_HLIB:
 		name = "SQL_DRIVER_HLIB";
@@ -7348,7 +7378,7 @@ odbc_quote_metadata(TDS_DBC * dbc, char type, char *dest, DSTR * dstr)
 	dst = dest;
 
 	/*
-	 * handle patterns 
+	 * handle patterns
 	 * "'" -> "''" (normal string quoting)
 	 *
 	 * if metadata_id is FALSE
@@ -7654,7 +7684,7 @@ SQLSetScrollOptions(SQLHSTMT hstmt, SQLUSMALLINT fConcurrency, SQLLEN crowKeyset
 
 	ODBC_ENTER_HSTMT;
 
-	tdsdump_log(TDS_DBG_FUNC, "SQLSetScrollOptions(%p, %u, %ld, %u)\n", 
+	tdsdump_log(TDS_DBG_FUNC, "SQLSetScrollOptions(%p, %u, %ld, %u)\n",
 			hstmt, fConcurrency, (long int) crowKeyset, crowRowset);
 
 	if (!stmt->dbc->cursor_support) {
@@ -7690,7 +7720,7 @@ SQLSetScrollOptions(SQLHSTMT hstmt, SQLUSMALLINT fConcurrency, SQLLEN crowKeyset
 			cursor_type = SQL_CURSOR_KEYSET_DRIVEN;
 			break;
 		}
-		
+
 		odbc_errs_add(&stmt->errs, "HY107", NULL);
 		ODBC_EXIT_(stmt);
 	}

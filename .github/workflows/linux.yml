@@ -1,0 +1,129 @@
+name: Linux
+
+on:
+    push:
+        branches:
+            - '**'
+        paths-ignore:
+            - .github/workflows/macos.yml
+            - .github/workflows/windows.yml
+        tags:
+            - 'v[0-9]+.[0-9]+.[0-9]+'
+            - 'v[0-9]+.[0-9]+.[0-9]+rc[0-9]+'
+    pull_request:
+        branches:
+            - '**'
+        paths-ignore:
+            - .github/workflows/macos.yml
+            - .github/workflows/windows.yml
+
+    workflow_dispatch:
+
+# Declare default permissions as read only.
+permissions: read-all
+
+jobs:
+
+    build:
+
+        runs-on: ${{ matrix.os }}
+
+        strategy:
+            matrix:
+                os: [ubuntu-latest]
+                tds-version: [7.1, 7.2, 7.3, 7.4]
+                mssql-version: [2019, 2022]
+
+        #continue-on-error: true
+
+        env:
+            PREFIX: /tmp/freetds
+            FREETDSCONF: /tmp/freetds/freetds.conf.local
+            TDSDUMP: /tmp/freetds/freetds.log
+            TDSDUMPCONFIG: /tmp/freetds/freetds-DUMP-CONFIG.log
+            TDSPWDSRV: local
+            TDSPWDDB: tempdb
+            TDSPWDUID: sa
+            TDSPWDPWD: sqlServerPassw0rd
+            TDSPORT: 1433
+            TDSVER: ${{ matrix.tds-version }}
+            TDSPWDFILE: /tmp/freetds.pwd
+
+        services:
+            SQLServer:
+                image: mcr.microsoft.com/mssql/server:${{ matrix.mssql-version }}-latest
+                env:
+                    ACCEPT_EULA: Y
+                    SA_PASSWORD: ${{ env.TDSPWDPWD }}
+                ports:
+                    - 1433:1433
+
+        steps:
+
+        - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+        - name: Install dependencies
+          run: |
+            sudo apt-get update
+            sudo apt-get install \
+                        --no-install-recommends \
+                        autoconf automake libtool gettext gperf \
+                        libgnutls28-dev \
+                        libssl-dev libkrb5-dev \
+                        unixodbc-dev pkg-config
+
+        - name: configure
+          run: |
+            autoreconf -i
+            ./configure --with-gnutls  --enable-silent-rules \
+                    --prefix=${PREFIX} \
+                    --with-openssl=yes \
+                    --with-gnutls=yes \
+                    --enable-krb5 \
+                    --with-tdsver=${TDSVER}
+
+        - name: make
+          run: make
+
+        - name: install
+          run: make install
+
+        - name: Show settings
+          run: ${PREFIX}/bin/tsql -C
+
+        - name: make configs
+          run: |
+            mkdir -p `dirname ${FREETDSCONF}`
+            echo -e "\n
+            [global]\n
+            port = ${TDSPORT}\n
+            tds version = ${TDSVER}\n
+            encryption = require\n
+            [local]\n
+            host = 127.0.0.1\n" >> ${FREETDSCONF}
+            ./misc/write_PWD_from_env_vars.sh
+
+        - name: make check
+          run: |
+            make -C src/replacements/unittests check VERBOSE=1
+            make -C src/utils/unittests check VERBOSE=1
+            make -C src/tds/unittests check VERBOSE=1
+            make -C src/dblib/unittests check VERBOSE=1
+            make -C src/ctlib/unittests check VERBOSE=1
+            make -C src/odbc/unittests check VERBOSE=1
+            make -C src/apps/unittests check VERBOSE=1
+
+        - name: Archive test results on failure
+          if: failure()
+          uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+          with:
+            name: test-logs
+            path: |
+                src/replacements/unittests/test-suite.log
+                src/utils/unittests/test-suite.log
+                src/tds/unittests/test-suite.log
+                src/dblib/unittests/test-suite.log
+                src/ctlib/unittests/test-suite.log
+                src/odbc/unittests/test-suite.log
+                src/apps/unittests/test-suite.log
+                /tmp/freetds/*

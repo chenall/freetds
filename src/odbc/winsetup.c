@@ -160,7 +160,11 @@ write_all_strings(DSNINFO * di)
 	sprintf(tmp, "%u", di->login->port);
 	WRITESTR("Port", tmp);
 
-	sprintf(tmp, "%d.%d", TDS_MAJOR(di->login), TDS_MINOR(di->login));
+	if (TDS_MAJOR(di->login) == 0)
+		strcpy(tmp, "auto");
+	else
+		sprintf(tmp, "%d.%d", TDS_MAJOR(di->login), TDS_MINOR(di->login));
+
 	WRITESTR("TDS_Version", tmp);
 
 	sprintf(tmp, "%u", di->login->text_size);
@@ -183,7 +187,7 @@ validate(DSNINFO * di)
 {
 	if (!SQLValidDSN(tds_dstr_cstr(&di->dsn)))
 		return "Invalid DSN";
-	if (!IS_TDS42(di->login) && !IS_TDS46(di->login)
+	if (TDS_MAJOR(di->login) != 0 && !IS_TDS42(di->login) && !IS_TDS46(di->login)
 	    && !IS_TDS50(di->login) && !IS_TDS7_PLUS(di->login))
 		return "Bad Protocol version";
 	if (tds_dstr_isempty(&di->login->server_name))
@@ -216,7 +220,8 @@ DSNDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 	const char *pstr;
 	int major, minor, i;
 	static const char *protocols[] = {
-		"TDS 4.2", "TDS 4.6", "TDS 5.0", "TDS 7.0", "TDS 7.1", "TDS 7.2", "TDS 7.3", "TDS 7.4", NULL
+		"AUTO", "TDS 4.2", "TDS 4.6", "TDS 5.0", "TDS 7.0", "TDS 7.1", "TDS 7.2", "TDS 7.3", "TDS 7.4",
+		"TDS 8.0", NULL
 	};
 
 	switch (message) {
@@ -233,7 +238,11 @@ DSNDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 
 		/* copy info from DSNINFO to the dialog */
 		SendDlgItemMessage(hDlg, IDC_DSNNAME, WM_SETTEXT, 0, (LPARAM) tds_dstr_cstr(&di->dsn));
-		sprintf(tmp, "TDS %d.%d", TDS_MAJOR(di->login), TDS_MINOR(di->login));
+		if (TDS_MAJOR(di->login) == 0)
+			strcpy(tmp, "AUTO");
+		else
+			sprintf(tmp, "TDS %d.%d", TDS_MAJOR(di->login), TDS_MINOR(di->login));
+
 		SendDlgItemMessage(hDlg, IDC_PROTOCOL, CB_SELECTSTRING, -1, (LPARAM) tmp);
 		SendDlgItemMessage(hDlg, IDC_ADDRESS, WM_SETTEXT, 0, (LPARAM) tds_dstr_cstr(&di->login->server_name));
 		sprintf(tmp, "%u", di->login->port);
@@ -261,9 +270,11 @@ DSNDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 		tds_dstr_copy(&di->dsn, tmp);
 		SendDlgItemMessage(hDlg, IDC_PROTOCOL, WM_GETTEXT, sizeof tmp, (LPARAM) tmp);
 		minor = 0;
-		if (sscanf(tmp, "%*[^0-9]%d.%d", &major, &minor) > 1) {
+		if (strcmp(tmp, "AUTO") == 0)
+			di->login->tds_version = 0;
+		else if (sscanf(tmp, "%*[^0-9]%d.%d", &major, &minor) > 1)
 			di->login->tds_version = (major << 8) | minor;
-		}
+
 		SendDlgItemMessage(hDlg, IDC_ADDRESS, WM_GETTEXT, sizeof tmp, (LPARAM) tmp);
 		tds_dstr_copy(&di->login->server_name, tmp);
 		SendDlgItemMessage(hDlg, IDC_PORT, WM_GETTEXT, sizeof tmp, (LPARAM) tmp);
@@ -306,7 +317,7 @@ ConfigDSN(HWND hwndParent, WORD fRequest, LPCSTR lpszDriver, LPCSTR lpszAttribut
 	 * ConfigDSN() only looks up addresses and names, and never actually
 	 * uses any sockets.
 	 */
-	INITSOCKET();
+	tds_socket_init();
 
 	/* Create a blank login struct */
 	di = alloc_dsninfo();
@@ -378,12 +389,12 @@ ConfigDSN(HWND hwndParent, WORD fRequest, LPCSTR lpszDriver, LPCSTR lpszAttribut
 
 	/* Clean up and return TRUE, indicating that the change took place */
 	free_dsninfo(di);
-	DONESOCKET();
+	tds_socket_done();
 	return TRUE;
 
       Fail:
 	free_dsninfo(di);
-	DONESOCKET();
+	tds_socket_done();
 	return FALSE;
 }
 

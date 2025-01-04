@@ -365,13 +365,12 @@ tds_set_uvc(TDSSOCKET * tds, TDSRESULTINFO *res_info)
  * \tds
  */
 static TDSRET
-tds_parse_login_results(TDSSOCKET * tds)
+tds_parse_login_results(TDSSOCKET * tds, bool ignore_errors)
 {
 	TDS_INT result_type;
 	TDS_INT done_flags;
 	TDSRET rc;
 	TDSCOLUMN *curcol;
-	bool ignore_errors = false;
 	bool last_required = false;
 
 	CHECK_TDS_EXTRA(tds);
@@ -391,8 +390,7 @@ tds_parse_login_results(TDSSOCKET * tds)
 			}
 			if (tds->res_info->num_cols == 1 && strcmp(tds_dstr_cstr(&curcol->column_name), "uvc") == 0)
 				rc = tds_set_uvc(tds, tds->res_info);
-			if (TDS_FAILED(rc))
-				return rc;
+			TDS_PROPAGATE(rc);
 			break;
 
 		case TDS_DONE_RESULT:
@@ -412,42 +410,71 @@ tds_parse_login_results(TDSSOCKET * tds)
 }
 
 static TDSRET
-tds_setup_connection(TDSSOCKET *tds, TDSLOGIN *login, bool set_db, bool set_spid)
+tds_process_single(TDSSOCKET *tds, char *query, bool ignore_errors)
+{
+	TDSRET erc;
+
+	if (!query[0])
+		return TDS_SUCCESS;
+
+	/* submit and parse results */
+	erc = tds_submit_query(tds, query);
+	if (TDS_SUCCEED(erc))
+		erc = tds_parse_login_results(tds, ignore_errors);
+
+	/* prepare next query */
+	query[0] = 0;
+
+	if (TDS_FAILED(erc))
+		free(query);
+
+	return erc;
+}
+
+#define process_single(ignore_errors) do { \
+	if (!single_query && TDS_FAILED(erc = tds_process_single(tds, str, ignore_errors))) \
+		return erc; \
+} while(0)
+
+static TDSRET
+tds_setup_connection(TDSSOCKET *tds, TDSLOGIN *login, bool set_db, bool single_query)
 {
 	TDSRET erc;
 	char *str;
 	int len;
-	bool parse_results = false;
+	const char *const product_name = (tds->conn->product_name != NULL ? tds->conn->product_name : "");
+	const bool is_sql_anywhere = (strcasecmp(product_name, "SQL Anywhere") == 0);
+	const bool is_openserver = (strcasecmp(product_name, "OpenServer") == 0);
 
 	len = 192 + tds_quote_id(tds, NULL, tds_dstr_cstr(&login->database),-1);
 	if ((str = tds_new(char, len)) == NULL)
 		return TDS_FAIL;
 
 	str[0] = 0;
-	if (login->text_size) {
+	if (login->text_size)
 		sprintf(str, "SET TEXTSIZE %d\n", login->text_size);
-	}
-	if (set_spid && tds->conn->spid == -1) {
+	process_single(false);
+
+	if (tds->conn->spid == -1 && !is_openserver)
 		strcat(str, "SELECT @@spid spid\n");
-		parse_results = true;
-	}
+	process_single(true);
+
 	/* Select proper database if specified.
 	 * SQL Anywhere does not support multiple databases and USE statement
 	 * so don't send the request to avoid connection failures */
-	if (set_db && !tds_dstr_isempty(&login->database) &&
-	    (tds->conn->product_name == NULL || strcasecmp(tds->conn->product_name, "SQL Anywhere") != 0)) {
+	if (set_db && !tds_dstr_isempty(&login->database) && !is_sql_anywhere) {
 		strcat(str, "USE ");
 		tds_quote_id(tds, strchr(str, 0), tds_dstr_cstr(&login->database), -1);
 		strcat(str, "\n");
 	}
-	if (IS_TDS50(tds->conn)
-	    &&	(tds->conn->product_name == NULL
-		 ||  strcasecmp(tds->conn->product_name, "OpenServer") != 0)) {
+	process_single(false);
+
+	if (IS_TDS50(tds->conn) && !is_sql_anywhere && !is_openserver) {
 		strcat(str, "SELECT CONVERT(NVARCHAR(3), 'abc') nvc\n");
-		parse_results = true;
 		if (tds->conn->product_version >= TDS_SYB_VER(12, 0, 0))
 			strcat(str, "EXECUTE ('SELECT CONVERT(UNIVARCHAR(3), ''xyz'') uvc')\n");
 	}
+	process_single(true);
 
 	/* nothing to set, just return */
 	if (str[0] == 0) {
@@ -457,15 +484,9 @@ tds_setup_connection(TDSSOCKET *tds, TDSLOGIN *login, bool set_db, bool set_spid
 
 	erc = tds_submit_query(tds, str);
 	free(str);
-	if (TDS_FAILED(erc))
-		return erc;
+	TDS_PROPAGATE(erc);
 
-	if (parse_results)
-		erc = tds_parse_login_results(tds);
-	else
-		erc = tds_process_simple_query(tds);
-
-	return erc;
+	return tds_parse_login_results(tds, false);
 }
 
 /**
@@ -671,7 +692,7 @@ reroute:
 	if (TDS_FAILED(erc) || TDS_FAILED(tds_process_login_tokens(tds))) {
 		tdsdump_log(TDS_DBG_ERROR, "login packet %s\n", TDS_SUCCEED(erc)? "accepted":"rejected");
 		tds_close_socket(tds);
-		tdserror(tds_get_ctx(tds), tds, TDSEFCON, 0); 	/* "Adaptive Server connection failed" */
+		tdserror(tds_get_ctx(tds), tds, TDSEFCON, 0); 	/* "TDS server connection failed" */
 		return -TDSEFCON;
 	}
 
@@ -739,11 +760,10 @@ reroute:
 #endif
 
 	erc = tds_setup_connection(tds, login, !db_selected, true);
-	/* try without asking @@spid, some servers do not support it */
-	if (TDS_FAILED(erc) && tds->conn->spid == -1)
-		erc = tds_setup_connection(tds, login, !db_selected, false);
+	/* try one query at a time, some servers do not support some queries */
 	if (TDS_FAILED(erc))
-		return erc;
+		erc = tds_setup_connection(tds, login, !db_selected, false);
+	TDS_PROPAGATE(erc);
 
 	tds->query_timeout = login->query_timeout;
 	tds->login = NULL;
@@ -754,6 +774,9 @@ TDSRET
 tds_connect_and_login(TDSSOCKET * tds, TDSLOGIN * login)
 {
 	int oserr = 0;
+
+	TDS_PROPAGATE(tds8_adjust_login(login));
+
 	return tds_connect(tds, login, &oserr);
 }
 
@@ -1061,9 +1084,7 @@ tds7_send_login(TDSSOCKET * tds, const TDSLOGIN * login)
 
 
 	/* initialize ouput buffer for strings */
-	rc = tds_dynamic_stream_init(&data_stream, &data, 0);
-	if (TDS_FAILED(rc))
-		return rc;
+	TDS_PROPAGATE(tds_dynamic_stream_init(&data_stream, &data, 0));
 
 #define SET_FIELD_DSTR(field, dstr, len_limit) do { \
 	data_fields[field].ptr = tds_dstr_cstr(&(dstr)); \
@@ -1147,6 +1168,9 @@ tds7_send_login(TDSSOCKET * tds, const TDSLOGIN * login)
 	case 0x703:
 		tds7version = tds73Version;
 		break;
+	case 0x800:
+		/* for TDS 8.0 version should be ignored and ALPN used,
+		 * practically clients/servers usually set this to 7.4 */
 	case 0x704:
 		tds7version = tds74Version;
 		break;
@@ -1358,11 +1382,8 @@ tds71_do_login(TDSSOCKET * tds, TDSLOGIN* login)
 		encryption_level = TDS_ENCRYPTION_REQUEST;
 
 	/* all encrypted */
-	if (encryption_level == TDS_ENCRYPTION_STRICT) {
-		ret = tds_ssl_init(tds, true);
-		if (TDS_FAILED(ret))
-			return ret;
-	}
+	if (encryption_level == TDS_ENCRYPTION_STRICT)
+		TDS_PROPAGATE(tds_ssl_init(tds, true));
 
 	/*
 	 * fix a problem with mssql2k which doesn't like
@@ -1396,9 +1417,7 @@ tds71_do_login(TDSSOCKET * tds, TDSLOGIN* login)
 #else
 		tds_put_byte(tds, 0);
 #endif
-	ret = tds_flush_packet(tds);
-	if (TDS_FAILED(ret))
-		return ret;
+	TDS_PROPAGATE(tds_flush_packet(tds));
 
 	/* now process reply from server */
 	ret = tds_read_packet(tds);
@@ -1445,7 +1464,7 @@ tds71_do_login(TDSSOCKET * tds, TDSLOGIN* login)
 
 	tdsdump_log(TDS_DBG_INFO1, "detected crypt flag %d\n", crypt_flag);
 
-	if (!mars_replied)
+	if (!mars_replied && encryption_level != TDS_ENCRYPTION_STRICT)
 		tds->conn->tds_version = 0x701;
 
 	/* if server does not have certificate or TLS already setup do normal login */
@@ -1464,9 +1483,7 @@ tds71_do_login(TDSSOCKET * tds, TDSLOGIN* login)
 
 	/* here we have to do encryption ... */
 
-	ret = tds_ssl_init(tds, false);
-	if (TDS_FAILED(ret))
-		return ret;
+	TDS_PROPAGATE(tds_ssl_init(tds, false));
 
 	/* server just encrypt the first packet */
 	if (crypt_flag == TDS7_ENCRYPT_OFF)

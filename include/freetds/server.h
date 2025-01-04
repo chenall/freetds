@@ -39,25 +39,24 @@ TDSLOGIN *tds_alloc_read_login(TDSSOCKET * tds);
 /* query.c */
 char *tds_get_query(TDSSOCKET * tds);
 char *tds_get_generic_query(TDSSOCKET * tds);
+void tds_free_query(void);
 
 /* server.c */
 void tds_env_change(TDSSOCKET * tds, int type, const char *oldvalue, const char *newvalue);
 void tds_send_msg(TDSSOCKET * tds, int msgno, int msgstate, int severity, const char *msgtext, const char *srvname,
 		  const char *procname, int line);
 void tds_send_login_ack(TDSSOCKET * tds, const char *progname);
-void tds_send_eed(TDSSOCKET * tds, int msgno, int msgstate, int severity, char *msgtext, char *srvname, char *procname, int line);
-void tds_send_err(TDSSOCKET * tds, int severity, int dberr, int oserr, char *dberrstr, char *oserrstr);
+void tds_send_eed(TDSSOCKET * tds, int msgno, int msgstate, int severity, const char *msgtext, const char *srvname,
+		  const char *procname, int line, const char *sqlstate);
+void tds_send_err(TDSSOCKET * tds, int msgno, int msgstate, int severity, const char *msgtext, const char *srvname,
+		  const char *procname, int line);
 void tds_send_capabilities_token(TDSSOCKET * tds);
 /* TODO remove, use tds_send_done */
 void tds_send_done_token(TDSSOCKET * tds, TDS_SMALLINT flags, TDS_INT numrows);
 void tds_send_done(TDSSOCKET * tds, int token, TDS_SMALLINT flags, TDS_INT numrows);
 void tds_send_control_token(TDSSOCKET * tds, TDS_SMALLINT numcols);
-void tds_send_col_name(TDSSOCKET * tds, TDSRESULTINFO * resinfo);
-void tds_send_col_info(TDSSOCKET * tds, TDSRESULTINFO * resinfo);
-void tds_send_result(TDSSOCKET * tds, TDSRESULTINFO * resinfo);
-void tds7_send_result(TDSSOCKET * tds, TDSRESULTINFO * resinfo);
-void tds_send_table_header(TDSSOCKET * tds, TDSRESULTINFO * resinfo);
-void tds_send_row(TDSSOCKET * tds, TDSRESULTINFO * resinfo);
+TDSRET tds_send_table_header(TDSSOCKET * tds, TDSRESULTINFO * resinfo);
+TDSRET tds_send_row(TDSSOCKET * tds, TDSRESULTINFO * resinfo);
 void tds71_send_prelogin(TDSSOCKET * tds);
 
 #if 0

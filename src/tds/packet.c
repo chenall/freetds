@@ -39,10 +39,6 @@
 #include <unistd.h>
 #endif /* HAVE_UNISTD_H */
 
-#if HAVE_POLL_H
-#include <poll.h>
-#endif /* HAVE_POLL_H */
-
 #include <freetds/tds.h>
 #include <freetds/bytes.h>
 #include <freetds/iconv.h>
@@ -396,7 +392,7 @@ tds_connection_network(TDSCONNECTION *conn, TDSSOCKET *tds, int send)
 		}
 
 		/* received */
-		if (rc & POLLIN) {
+		if (rc & (POLLIN|POLLHUP)) {
 			TDSPACKET *packet;
 			TDSSOCKET *s;
 
@@ -996,6 +992,25 @@ TDSRET
 tds_freeze_close(TDSFREEZE *freeze)
 {
 	return tds_freeze_close_len(freeze, freeze->size_len ? tds_freeze_written(freeze) - freeze->size_len : 0);
+}
+
+/**
+ * Stop keeping data for this specific freeze.
+ *
+ * If size_len was used for ::tds_freeze this function write the written bytes
+ * at position when ::tds_freeze was called.
+ * After this call freeze should not be used.
+ * Similar to ::tds_freeze_close but count is written in unit, not bytes.
+ *
+ * @param[in]  freeze  structure to work on
+ */
+TDSRET
+tds_freeze_close_string(TDSFREEZE *freeze)
+{
+	size_t written = tds_freeze_written(freeze) - freeze->size_len;
+	if (IS_TDS7_PLUS(freeze->tds->conn))
+		written /= 2;
+	return tds_freeze_close_len(freeze, written);
 }
 
 static void

@@ -54,7 +54,7 @@
 #include <freetds/tds.h>
 #include <freetds/iconv.h>
 #include <freetds/server.h>
-#include <freetds/utils/string.h>
+#include <freetds/utils.h>
 
 unsigned char *
 tds7_decrypt_pass(const unsigned char *crypt_pass, int len, unsigned char *clear_pass)
@@ -77,6 +77,7 @@ tds_listen(TDSCONTEXT * ctx, int ip_port)
 	TDSSOCKET *tds;
 	TDS_SYS_SOCKET fd, s;
 	socklen_t len;
+	int optval = 1;
 #ifdef AF_INET6
 	struct sockaddr_in6 sin;
 
@@ -99,22 +100,25 @@ tds_listen(TDSCONTEXT * ctx, int ip_port)
 		perror("socket");
 		return NULL;
 	}
+	setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (void*) &optval, sizeof(optval));
 	if (bind(s, (struct sockaddr *) &sin, sizeof(sin)) < 0) {
-		CLOSESOCKET(s);
 		perror("bind");
+		CLOSESOCKET(s);
 		return NULL;
 	}
 	listen(s, 5);
 	len = sizeof(sin);
 	fd = tds_accept(s, (struct sockaddr *) &sin, &len);
 	if (TDS_IS_SOCKET_INVALID(fd)) {
-		CLOSESOCKET(s);
 		perror("accept");
+		CLOSESOCKET(s);
 		return NULL;
 	}
+	tds_socket_set_nodelay(fd);
 	CLOSESOCKET(s);
 	tds = tds_alloc_socket(ctx, 4096);
 	if (!tds) {
+		CLOSESOCKET(fd);
 		fprintf(stderr, "out of memory");
 		return NULL;
 	}
@@ -177,7 +181,7 @@ tds7_read_login(TDSSOCKET * tds, TDSLOGIN * login)
 	int a;
 	unsigned host_name_len, user_name_len, app_name_len, server_name_len;
 	unsigned library_name_len, language_name_len;
-	unsigned auth_len, database_name_len;
+	unsigned auth_len, database_name_len, ext_len;
 	size_t unicode_len, password_len;
 	char *unicode_string, *psrc;
 	char *pbuf;
@@ -198,7 +202,7 @@ tds7_read_login(TDSSOCKET * tds, TDSLOGIN * login)
 	/* sql type (byte) + flag3 (byte) + timezone (int) + collation (4 byte) */
 	tds_get_n(tds, NULL, 10);
 
-	packet_start = IS_TDS72_PLUS(tds->conn) ? 86 + 8 : 86;	/* ? */
+	packet_start = IS_TDS72_PLUS(login) ? 86 + 8 : 86;	/* ? */
 	if (packet_len < packet_start)
 		return 0;
 
@@ -225,8 +229,7 @@ tds7_read_login(TDSSOCKET * tds, TDSLOGIN * login)
 	READ_BUF(server_name_len, 2);
 
 	/* unknown */
-	tds_get_smallint(tds);
-	tds_get_smallint(tds);
+	READ_BUF(ext_len, 1);
 
 	/* library */
 	READ_BUF(library_name_len, 2);
@@ -280,6 +283,7 @@ tds7_read_login(TDSSOCKET * tds, TDSLOGIN * login)
 
 	res = res && tds_dstr_get(tds, &login->app_name, app_name_len);
 	res = res && tds_dstr_get(tds, &login->server_name, server_name_len);
+	tds_get_n(tds, NULL, ext_len);
 	res = res && tds_dstr_get(tds, &login->library, library_name_len);
 	res = res && tds_dstr_get(tds, &login->language, language_name_len);
 	res = res && tds_dstr_get(tds, &login->database, database_name_len);
@@ -289,6 +293,8 @@ tds7_read_login(TDSSOCKET * tds, TDSLOGIN * login)
 	tds_dstr_empty(&login->server_charset);	/*empty char_set for TDS 7.0 */
 	login->block_size = 0;	/*0 block size for TDS 7.0 */
 	login->encryption_level = TDS_ENCRYPTION_OFF;
+
+	tds->conn->tds_version = login->tds_version;
 
 	return res;
 }

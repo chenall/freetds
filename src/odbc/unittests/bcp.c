@@ -138,13 +138,16 @@ init(void)
 }
 
 #define VARCHAR_BIND(x) \
-	bcp_bind( odbc_conn, (prefixlen == 0 ? (void*)&x.value : (void*)&x.prefix), prefixlen, strlen(x.value), NULL, termlen, BCP_TYPE_SQLVARCHAR, col++ )
+	bcp_bind( odbc_conn, (prefixlen == 0 ? (void*)&x.value : (void*)&x.prefix), prefixlen, \
+		strlen(x.value), NULL, termlen, BCP_TYPE_SQLVARCHAR, col++ )
 
 #define INT_BIND(x) \
-	bcp_bind( odbc_conn, (prefixlen == 0 ? (void*)&x.value : (void*)&x.prefix), prefixlen, SQL_VARLEN_DATA, NULL, termlen, BCP_TYPE_SQLINT4,    col++ )
+	bcp_bind( odbc_conn, (prefixlen == 0 ? (void*)&x.value : (void*)&x.prefix), prefixlen, \
+		SQL_VARLEN_DATA, NULL, termlen, BCP_TYPE_SQLINT4,    col++ )
 
 #define NULL_BIND(x, type) \
-	bcp_bind( odbc_conn, (prefixlen == 0 ? (void*)&x.value : (void*)&null_prefix), prefixlen, prefixlen == 0 ? SQL_NULL_DATA : SQL_VARLEN_DATA, NULL, termlen, type,    col++ )
+	bcp_bind( odbc_conn, (prefixlen == 0 ? (void*)&x.value : (void*)&null_prefix), prefixlen, \
+		prefixlen == 0 ? SQL_NULL_DATA : SQL_VARLEN_DATA, NULL, termlen, type,    col++ )
 
 static void
 test_bind(int prefixlen)
@@ -339,6 +342,9 @@ static void special_inserts(void)
 	if (bcp_init(odbc_conn, (bcp_init_char_t *) T("special_types_bcp_unittest"), NULL, NULL, BCP_DIRECTION_IN) == FAIL)
 		report_bcp_error("bcp_init", __LINE__, __FILE__);
 	printf("OK\n");
+
+	if (bcp_control(odbc_conn, BCPHINTSA, (void *) "TABLOCK") != SUCCEED)
+		report_bcp_error("bcp_init", __LINE__, __FILE__);
 
 	datetime.dtdays = 42075;
 	datetime.dttime = 16683900;

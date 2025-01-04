@@ -6,16 +6,47 @@
 #include <ctype.h>
 #include "parser.h"
 
-unsigned int odbc_line_num;
+enum
+{
+	MAX_BOOLS = 64,
+	MAX_CONDITIONS = 32
+};
+
+typedef struct
+{
+	char *name;
+	bool value;
+} bool_t;
+
+struct odbc_parser
+{
+	unsigned int line_num;
+
+	bool_t bools[MAX_BOOLS];
+
+	bool conds[MAX_CONDITIONS];
+	unsigned cond_level;
+
+	void *read_param;
+	odbc_read_line_p read_func;
+
+	char line_buf[1024];
+};
+
+unsigned int
+odbc_line_num(odbc_parser *parser)
+{
+	return parser->line_num;
+}
 
 void
-odbc_fatal(const char *msg, ...)
+odbc_fatal(odbc_parser *parser, const char *msg, ...)
 {
 	va_list ap;
 
 	va_start(ap, msg);
 	if (msg[0] == ':')
-		fprintf(stderr, "Line %u", odbc_line_num);
+		fprintf(stderr, "Line %u", parser->line_num);
 	vfprintf(stderr, msg, ap);
 	va_end(ap);
 
@@ -28,16 +59,18 @@ const char *
 odbc_get_tok(char **p)
 {
 	char *s = *p, *end;
+
 	s += strspn(s, SEP);
-	if (!*s) return NULL;
+	if (!*s)
+		return NULL;
 	end = s + strcspn(s, SEP);
 	*end = 0;
-	*p = end+1;
+	*p = end + 1;
 	return s;
 }
 
 static void
-parse_cstr(char *s)
+parse_cstr(odbc_parser *parser, char *s)
 {
 	char hexbuf[4];
 	char *d = s;
@@ -57,182 +90,210 @@ parse_cstr(char *s)
 			break;
 		case 'x':
 			if (strlen(s) < 3)
-				odbc_fatal(": wrong string format\n");
+				odbc_fatal(parser, ": wrong string format\n");
 			memcpy(hexbuf, ++s, 2);
 			hexbuf[2] = 0;
 			*d++ = (char) strtoul(hexbuf, NULL, 16);
 			s += 2;
 			break;
 		default:
-			odbc_fatal(": wrong string format\n");
+			odbc_fatal(parser, ": wrong string format\n");
 		}
 	}
 	*d = 0;
 }
 
 const char *
-odbc_get_str(char **p)
+odbc_get_str(odbc_parser *parser, char **p)
 {
 	char *s = *p, *end;
+
 	s += strspn(s, SEP);
-	if (!*s) odbc_fatal(": unable to get string\n");
+	if (!*s)
+		odbc_fatal(parser, ": unable to get string\n");
 
 	if (strncmp(s, "\"\"\"", 3) == 0) {
 		s += 3;
 		end = strstr(s, "\"\"\"");
-		if (!end) odbc_fatal(": string not terminated\n");
+		if (!end)
+			odbc_fatal(parser, ": string not terminated\n");
 		*end = 0;
-		*p = end+3;
+		*p = end + 3;
 	} else if (s[0] == '\"') {
 		++s;
 		end = strchr(s, '\"');
-		if (!end) odbc_fatal(": string not terminated\n");
+		if (!end)
+			odbc_fatal(parser, ": string not terminated\n");
 		*end = 0;
-		parse_cstr(s);
-		*p = end+1;
+		parse_cstr(parser, s);
+		*p = end + 1;
 	} else {
 		return odbc_get_tok(p);
 	}
 	return s;
 }
 
-enum { MAX_BOOLS = 64 };
-typedef struct {
-	char *name;
-	int value;
-} bool_t;
-static bool_t bools[MAX_BOOLS];
-
 void
-odbc_set_bool(const char *name, int value)
+odbc_set_bool(odbc_parser *parser, const char *name, bool value)
 {
 	unsigned n;
-	value = !!value;
-	for (n = 0; n < MAX_BOOLS && bools[n].name; ++n)
-		if (!strcmp(bools[n].name, name)) {
-			bools[n].value = value;
+
+	for (n = 0; n < MAX_BOOLS && parser->bools[n].name; ++n)
+		if (!strcmp(parser->bools[n].name, name)) {
+			parser->bools[n].value = value;
 			return;
 		}
 
 	if (n == MAX_BOOLS)
-		odbc_fatal(": no more boolean variable free\n");
-	bools[n].name = strdup(name);
-	if (!bools[n].name) odbc_fatal(": out of memory\n");
-	bools[n].value = value;
+		odbc_fatal(parser, ": no more boolean variable free\n");
+	parser->bools[n].name = strdup(name);
+	if (!parser->bools[n].name)
+		odbc_fatal(parser, ": out of memory\n");
+	parser->bools[n].value = value;
 }
 
-static int
-get_bool(const char *name)
+static bool
+get_bool(odbc_parser *parser, const char *name)
 {
 	unsigned n;
-	if (!name)
-		odbc_fatal(": boolean variable not provided\n");
-	for (n = 0; n < MAX_BOOLS && bools[n].name; ++n)
-		if (!strcmp(bools[n].name, name))
-			return bools[n].value;
 
-	odbc_fatal(": boolean variable %s not found\n", name);
-	return 0;
+	if (!name)
+		odbc_fatal(parser, ": boolean variable not provided\n");
+	for (n = 0; n < MAX_BOOLS && parser->bools[n].name; ++n)
+		if (!strcmp(parser->bools[n].name, name))
+			return parser->bools[n].value;
+
+	odbc_fatal(parser, ": boolean variable %s not found\n", name);
+	return false;
 }
 
 /** initialize booleans, call after connection */
-void
-odbc_init_bools(void)
+static void
+init_bools(odbc_parser *parser)
 {
 	int big_endian = 1;
 
 	if (((char *) &big_endian)[0] == 1)
 		big_endian = 0;
-	odbc_set_bool("bigendian", big_endian);
+	odbc_set_bool(parser, "bigendian", !!big_endian);
 
-	odbc_set_bool("msdb", odbc_db_is_microsoft());
-	odbc_set_bool("freetds", odbc_driver_is_freetds());
-}
-
-void
-odbc_clear_bools(void)
-{
-	unsigned n;
-	for (n = 0; n < MAX_BOOLS && bools[n].name; ++n) {
-		free(bools[n].name);
-		bools[n].name = NULL;
-	}
-}
-
-enum { MAX_CONDITIONS = 32 };
-static char conds[MAX_CONDITIONS];
-static unsigned cond_level = 0;
-
-static int
-pop_condition(void)
-{
-	if (cond_level == 0) odbc_fatal(": no related if\n");
-	return conds[--cond_level];
+	odbc_set_bool(parser, "msdb", odbc_db_is_microsoft());
+	odbc_set_bool(parser, "freetds", odbc_driver_is_freetds());
 }
 
 static void
-push_condition(int cond)
+clear_bools(odbc_parser *parser)
 {
-	if (cond != 0 && cond != 1) odbc_fatal(": invalid cond value %d\n", cond);
-	if (cond_level >= MAX_CONDITIONS) odbc_fatal(": too much nested conditions\n");
-	conds[cond_level++] = cond;
+	unsigned n;
+
+	for (n = 0; n < MAX_BOOLS && parser->bools[n].name; ++n) {
+		free(parser->bools[n].name);
+		parser->bools[n].name = NULL;
+	}
 }
 
-static int
-get_not_cond(char **p)
+static bool
+pop_condition(odbc_parser *parser)
 {
-	int cond;
+	if (parser->cond_level == 0)
+		odbc_fatal(parser, ": no related if\n");
+	return parser->conds[--parser->cond_level];
+}
+
+static void
+push_condition(odbc_parser *parser, bool cond)
+{
+	if (parser->cond_level >= MAX_CONDITIONS)
+		odbc_fatal(parser, ": too much nested conditions\n");
+	parser->conds[parser->cond_level++] = cond;
+}
+
+static bool
+get_not_cond(odbc_parser *parser, char **p)
+{
+	bool cond;
 	const char *tok = odbc_get_tok(p);
-	if (!tok) odbc_fatal(": wrong condition syntax\n");
+
+	if (!tok)
+		odbc_fatal(parser, ": wrong condition syntax\n");
 
 	if (!strcmp(tok, "not"))
-		cond = !get_bool(odbc_get_tok(p));
+		cond = !get_bool(parser, odbc_get_tok(p));
 	else
-		cond = get_bool(tok);
+		cond = get_bool(parser, tok);
 
 	return cond;
 }
 
-static int
-get_condition(char **p)
+static bool
+get_condition(odbc_parser *parser, char **p)
 {
-	int cond1 = get_not_cond(p), cond2;
+	bool cond1 = get_not_cond(parser, p), cond2;
 	const char *tok;
 
-	while ((tok=odbc_get_tok(p)) != NULL) {
+	while ((tok = odbc_get_tok(p)) != NULL) {
 
-		cond2 = get_not_cond(p);
+		cond2 = get_not_cond(parser, p);
 
 		if (!strcmp(tok, "or"))
 			cond1 = cond1 || cond2;
 		else if (!strcmp(tok, "and"))
 			cond1 = cond1 && cond2;
-		else odbc_fatal(": wrong condition syntax\n");
+		else
+			odbc_fatal(parser, ": wrong condition syntax\n");
 	}
 	return cond1;
 }
 
-static FILE *parse_file;
-static char line_buf[1024];
+odbc_parser *
+odbc_init_parser_func(odbc_read_line_p read_func, void *param)
+{
+	odbc_parser *parser;
 
-void
+	if (!read_func) {
+		fprintf(stderr, "Missing reading function\n");
+		exit(1);
+	}
+
+	parser = tds_new0(odbc_parser, 1);
+	if (!parser) {
+		fprintf(stderr, "out of memory\n");
+		exit(1);
+	}
+	parser->read_param = param;
+	parser->read_func = read_func;
+	init_bools(parser);
+
+	return parser;
+}
+
+static char *
+read_file(void *param, char *s, size_t size)
+{
+	return fgets(s, size, (FILE *) param);
+}
+
+odbc_parser *
 odbc_init_parser(FILE *f)
 {
-	if (parse_file)
-		odbc_fatal("parser file already setup\n");
-	parse_file = f;
-	odbc_line_num = 0;
-	odbc_tds_version();
+	return odbc_init_parser_func(read_file, f);
+}
+
+void
+odbc_free_parser(odbc_parser *parser)
+{
+	clear_bools(parser);
+	free(parser);
 }
 
 const char *
-odbc_get_cmd_line(char **p_s, int *cond)
+odbc_get_cmd_line(odbc_parser *parser, char **p_s, bool *cond)
 {
-	while (fgets(line_buf, sizeof(line_buf), parse_file)) {
-		char *p = line_buf;
+	while (parser->read_func(parser->read_param, parser->line_buf, sizeof(parser->line_buf))) {
+		char *p = parser->line_buf;
 		const char *cmd;
 
-		++odbc_line_num;
+		++parser->line_num;
 
 		cmd = odbc_get_tok(&p);
 
@@ -242,19 +303,20 @@ odbc_get_cmd_line(char **p_s, int *cond)
 
 		/* conditional statement */
 		if (!strcmp(cmd, "else")) {
-			int c = pop_condition();
-			push_condition(c);
+			bool c = pop_condition(parser);
+
+			push_condition(parser, c);
 			*cond = c && !*cond;
 			continue;
 		}
 		if (!strcmp(cmd, "endif")) {
-			*cond = pop_condition();
+			*cond = pop_condition(parser);
 			continue;
 		}
 		if (!strcmp(cmd, "if")) {
-			push_condition(*cond);
+			push_condition(parser, *cond);
 			if (*cond)
-				*cond = get_condition(&p);
+				*cond = get_condition(parser, &p);
 			continue;
 		}
 
@@ -264,13 +326,13 @@ odbc_get_cmd_line(char **p_s, int *cond)
 			const char *s_ver = odbc_get_tok(&p);
 			int ver = odbc_tds_version();
 			int expected;
-			int res;
+			bool res;
 			unsigned M, m;
 
 			if (!cmp || !s_ver)
-				odbc_fatal(": missing parameters\n");
+				odbc_fatal(parser, ": missing parameters\n");
 			if (sscanf(s_ver, "%u.%u", &M, &m) != 2)
-				odbc_fatal(": invalid version %s\n", s_ver);
+				odbc_fatal(parser, ": invalid version %s\n", s_ver);
 			expected = M * 0x100u + m;
 
 			if (strcmp(cmp, ">") == 0)
@@ -286,10 +348,10 @@ odbc_get_cmd_line(char **p_s, int *cond)
 			else if (strcmp(cmp, "!=") == 0)
 				res = ver != expected;
 			else
-				odbc_fatal(": invalid operator %s\n", cmp);
+				odbc_fatal(parser, ": invalid operator %s\n", cmp);
 
 			if (*cond)
-				odbc_set_bool(bool_name, res);
+				odbc_set_bool(parser, bool_name, res);
 			continue;
 		}
 
@@ -298,4 +360,3 @@ odbc_get_cmd_line(char **p_s, int *cond)
 	}
 	return NULL;
 }
-

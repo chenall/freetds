@@ -678,30 +678,29 @@ tds_free_all_results(TDSSOCKET * tds)
 }
 
 /*
- * Return 1 if winsock is initialized, else 0.
+ * Return true if winsock is initialized, else false.
  */
-static int
+static bool
 winsock_initialized(void)
 {
-#if defined(_WIN32) || defined(_WIN64)
+#ifdef _WIN32
 	static bool initialized = false;
 	static tds_mutex mtx = TDS_MUTEX_INITIALIZER;
 
-	WSADATA wsa_data;
 	int erc;
 
 	if (initialized)
-		return 1;
+		return true;
 
 	tds_mutex_lock(&mtx);
 	/* same check inside the mutex */
 	if (initialized) {
 		tds_mutex_unlock(&mtx);
-		return 1;
+		return true;
 	}
 
 	/* initialize the socket layer */
-	erc = WSAStartup(MAKEWORD(2, 2), &wsa_data);
+	erc = tds_socket_init();
 	initialized = (erc == 0);
 	tds_mutex_unlock(&mtx);
 
@@ -709,10 +708,10 @@ winsock_initialized(void)
 		char *errstr = sock_strerror(erc);
 		tdsdump_log(TDS_DBG_ERROR, "tds_init_winsock: WSAStartup failed with %d (%s)\n", erc, errstr);
 		sock_strerror_free(errstr);
-		return 0;
+		return false;
 	}
 #endif
-	return 1;
+	return true;
 }
 
 TDSCONTEXT *
@@ -1858,6 +1857,7 @@ tds_alloc_bcpinfo(void)
 
 	TEST_MALLOC(bcpinfo, TDSBCPINFO);
 
+	tds_dstr_init(&bcpinfo->hint);
 	tds_dstr_init(&bcpinfo->tablename);
 
 	return bcpinfo;
@@ -1868,6 +1868,7 @@ Cleanup:
 void
 tds_deinit_bcpinfo(TDSBCPINFO *bcpinfo)
 {
+	tds_dstr_free(&bcpinfo->hint);
 	tds_dstr_free(&bcpinfo->tablename);
 	TDS_ZERO_FREE(bcpinfo->insert_stmt);
 	tds_free_results(bcpinfo->bindinfo);

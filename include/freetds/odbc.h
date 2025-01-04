@@ -314,7 +314,6 @@ struct _hdbc
 	TDS_INT default_query_timeout;
 
 	TDSBCPINFO *bcpinfo;
-	char *bcphint;
 };
 
 struct _hsattr
@@ -539,6 +538,9 @@ enum {
 };
 #undef ODBC_PARAM
 
+#define ODBC_PARAM(p) extern const char odbc_param_##p[];
+ODBC_PARAM_LIST
+#undef ODBC_PARAM
 
 /*
  * connectparams.h
@@ -748,6 +750,10 @@ void sqlwstr_free(SQLWSTRBUF *bufs);
 #endif
 
 int odbc_get_wide_canonic(TDSCONNECTION *conn);
+
+/* compatibility with old BCP implementation */
+#define BCPHINTS_OLD 6
+#define SQL_COPT_TDSODBC_IMPL_BCP_CONTROL_OLD	(SQL_COPT_TDSODBC_IMPL_BASE+1)
 
 #include <freetds/popvis.h>
 

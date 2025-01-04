@@ -179,6 +179,8 @@ SQLRETURN SQLSetStmtOption_nowarning(SQLHSTMT hstmt, SQLSMALLINT option, SQLULEN
 	CHKR2(SQLSetDescField, ((desc),a,b,c,d), SQL_HANDLE_DESC, (desc), res)
 #define CHKGetInfo(a,b,c,d,res) \
 	CHKR2(SQLGetInfo, (odbc_conn,a,b,c,d), SQL_HANDLE_DBC, odbc_conn, res)
+#define CHKNumParams(a,res) \
+	CHKR2(SQLNumParams, (odbc_stmt,a), SQL_HANDLE_STMT, odbc_stmt, res)
 
 int odbc_connect(void);
 int odbc_disconnect(void);
@@ -237,3 +239,6 @@ struct odbc_lookup_int
 int odbc_lookup(const char *name, const struct odbc_lookup_int *table, int def);
 const char *odbc_lookup_value(int value, const struct odbc_lookup_int *table, const char *def);
 extern struct odbc_lookup_int odbc_sql_c_types[];
+
+void odbc_swap_stmts(SQLHSTMT *a, SQLHSTMT *b);
+#define SWAP_STMT(stmt) odbc_swap_stmts(&odbc_stmt, &stmt)

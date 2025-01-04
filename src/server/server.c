@@ -32,6 +32,23 @@
 #include <freetds/data.h>
 #include <freetds/bytes.h>
 
+static void
+tds_env_change_string(TDSSOCKET * tds, int type, const char *oldvalue, const char *newvalue)
+{
+	TDSFREEZE outer;
+
+	tds_put_byte(tds, TDS_ENVCHANGE_TOKEN);
+	tds_freeze(tds, &outer, 2);
+	tds_put_byte(tds, type);
+	TDS_START_LEN_TINYINT(tds) {
+		tds_put_string(tds, newvalue, -1);
+	} TDS_END_LEN_STRING
+	TDS_START_LEN_TINYINT(tds) {
+		tds_put_string(tds, oldvalue, -1);
+	} TDS_END_LEN_STRING
+	tds_freeze_close(&outer);
+}
+
 void
 tds_env_change(TDSSOCKET * tds, int type, const char *oldvalue, const char *newvalue)
 {
@@ -53,24 +70,13 @@ tds_env_change(TDSSOCKET * tds, int type, const char *oldvalue, const char *newv
 	case TDS_ENV_LANG:
 	case TDS_ENV_PACKSIZE:
 	case TDS_ENV_CHARSET:
-		tds_put_byte(tds, TDS_ENVCHANGE_TOKEN);
-		/* totsize = type + newlen + newvalue + oldlen + oldvalue  */
-		/* FIXME ucs2 */
-		totsize = (IS_TDS7_PLUS(tds->conn) ? 2 : 1) * (strlen(oldvalue) + strlen(newvalue)) + 3;
-		tds_put_smallint(tds, totsize);
-		tds_put_byte(tds, type);
-		tds_put_byte(tds, strlen(newvalue));
-		/* FIXME this assume singlebyte -> ucs2 for mssql */
-		tds_put_string(tds, newvalue, strlen(newvalue));
-		tds_put_byte(tds, strlen(oldvalue));
-		/* FIXME this assume singlebyte -> ucs2 for mssql */
-		tds_put_string(tds, oldvalue, strlen(oldvalue));
+		tds_env_change_string(tds, type, oldvalue, newvalue);
 		break;
 	case TDS_ENV_LCID:
 	case TDS_ENV_SQLCOLLATION:
 #if 1
 		tds_put_byte(tds, TDS_ENVCHANGE_TOKEN);
-		/* totsize = type + len + oldvalue + len + newvalue */
+		/* totsize = type + len + newvalue + len + oldvalue */
 		totsize = 3 + strlen(newvalue) + strlen(oldvalue);
 		tds_put_smallint(tds, totsize);
 		tds_put_byte(tds, type);
@@ -86,94 +92,99 @@ tds_env_change(TDSSOCKET * tds, int type, const char *oldvalue, const char *newv
 }
 
 void
-tds_send_eed(TDSSOCKET * tds, int msgno, int msgstate, int severity, char *msgtext, char *srvname,
-	     char *procname, int line TDS_UNUSED)
+tds_send_eed(TDSSOCKET * tds, int msgno, int msgstate, int severity, const char *msgtext, const char *srvname,
+	     const char *procname, int line, const char *sqlstate)
 {
-	int totsize;
+	TDSFREEZE outer;
+
+	if (!procname)
+		procname = "";
 
 	tds_put_byte(tds, TDS_EED_TOKEN);
-	totsize = 7 + strlen(procname) + 5 + strlen(msgtext) + 2 + strlen(srvname) + 3;
-	tds_put_smallint(tds, totsize);
-	tds_put_smallint(tds, msgno);
-	tds_put_smallint(tds, 0);	/* unknown */
+	tds_freeze(tds, &outer, 2);
+	tds_put_int(tds, msgno);
 	tds_put_byte(tds, msgstate);
 	tds_put_byte(tds, severity);
-	tds_put_byte(tds, strlen(procname));
-	tds_put_n(tds, procname, strlen(procname));
-	tds_put_byte(tds, 0);	/* unknown */
-	tds_put_byte(tds, 1);	/* unknown */
-	tds_put_byte(tds, 0);	/* unknown */
-	tds_put_smallint(tds, strlen(msgtext) + 1);
-	tds_put_n(tds, msgtext, strlen(msgtext));
+	TDS_START_LEN_TINYINT(tds) {
+		tds_put_string(tds, sqlstate, -1);
+	} TDS_END_LEN_STRING
+	tds_put_byte(tds, 0);	/* has EED */
+	tds_put_byte(tds, 1);	/* status */
+	tds_put_byte(tds, 0);	/* transaction state */
+	TDS_START_LEN_USMALLINT(tds) {
+		tds_put_string(tds, msgtext, -1);
+	} TDS_END_LEN_STRING
+	TDS_START_LEN_TINYINT(tds) {
+		tds_put_string(tds, srvname, -1);
+	} TDS_END_LEN_STRING
+	TDS_START_LEN_TINYINT(tds) {
+		tds_put_string(tds, procname, -1);
+	} TDS_END_LEN_STRING
+	tds_put_smallint(tds, line);	/* line */
+	tds_freeze_close(&outer);
+}
+
+static void
+tds_send_info(TDSSOCKET * tds, TDS_TINYINT token, int msgno, int msgstate, int severity,
+	      const char *msgtext, const char *srvname, const char *procname, int line)
+{
+	TDSFREEZE outer;
+
+	if (!procname)
+		procname = "";
+
+	tds_put_byte(tds, token);
+	tds_freeze(tds, &outer, 2);
+	tds_put_int(tds, msgno);
+	tds_put_byte(tds, msgstate);
 	tds_put_byte(tds, severity);
-	tds_put_byte(tds, strlen(srvname));
-	tds_put_n(tds, srvname, strlen(srvname));
-	tds_put_byte(tds, 0);	/* unknown */
-	tds_put_byte(tds, 1);	/* unknown */
-	tds_put_byte(tds, 0);	/* unknown */
+	TDS_START_LEN_USMALLINT(tds) {
+		tds_put_string(tds, msgtext, -1);
+	} TDS_END_LEN_STRING
+	TDS_START_LEN_TINYINT(tds) {
+		tds_put_string(tds, srvname, -1);
+	} TDS_END_LEN_STRING
+	TDS_START_LEN_TINYINT(tds) {
+		tds_put_string(tds, procname, -1);
+	} TDS_END_LEN_STRING
+	if (IS_TDS72_PLUS(tds->conn))
+		tds_put_int(tds, line);
+	else
+		tds_put_smallint(tds, line);
+	tds_freeze_close(&outer);
 }
 
 void
 tds_send_msg(TDSSOCKET * tds, int msgno, int msgstate, int severity,
 	     const char *msgtext, const char *srvname, const char *procname, int line)
 {
-	int msgsz;
-	size_t len;
-
-	tds_put_byte(tds, TDS_INFO_TOKEN);
-	if (!procname)
-		procname = "";
-	len = strlen(procname);
-	msgsz = 4		/* msg no    */
-		+ 1		/* msg state */
-		+ 1		/* severity  */
-		/* FIXME ucs2 */
-		+ 4 + (IS_TDS7_PLUS(tds->conn) ? 2 : 1) * (strlen(msgtext) + strlen(srvname) + len)
-		+ (IS_TDS72_PLUS(tds->conn) ? 4 : 2);	/* line number */
-	tds_put_smallint(tds, msgsz);
-	tds_put_int(tds, msgno);
-	tds_put_byte(tds, msgstate);
-	tds_put_byte(tds, severity);
-	tds_put_smallint(tds, strlen(msgtext));
-	/* FIXME ucs2 */
-	tds_put_string(tds, msgtext, strlen(msgtext));
-	tds_put_byte(tds, strlen(srvname));
-	/* FIXME ucs2 */
-	tds_put_string(tds, srvname, strlen(srvname));
-	if (len) {
-		tds_put_byte(tds, len);
-		/* FIXME ucs2 */
-		tds_put_string(tds, procname, len);
-	} else {
-		tds_put_byte(tds, 0);
-	}
-	if (IS_TDS72_PLUS(tds->conn))
-		tds_put_int(tds, line);
-	else
-		tds_put_smallint(tds, line);
+	tds_send_info(tds, TDS_INFO_TOKEN, msgno, msgstate, severity, msgtext, srvname, procname, line);
 }
 
 void
-tds_send_err(TDSSOCKET * tds, int severity TDS_UNUSED, int dberr TDS_UNUSED, int oserr TDS_UNUSED,
-	     char *dberrstr TDS_UNUSED, char *oserrstr TDS_UNUSED)
+tds_send_err(TDSSOCKET * tds, int msgno, int msgstate, int severity,
+	     const char *msgtext, const char *srvname, const char *procname, int line)
 {
-	tds_put_byte(tds, TDS_ERROR_TOKEN);
+	tds_send_info(tds, TDS_ERROR_TOKEN, msgno, msgstate, severity, msgtext, srvname, procname, line);
 }
 
 void
 tds_send_login_ack(TDSSOCKET * tds, const char *progname)
 {
 	TDS_UINT ui, version;
+	TDSFREEZE outer;
 
 	tds_put_byte(tds, TDS_LOGINACK_TOKEN);
-	tds_put_smallint(tds, 10 + (IS_TDS7_PLUS(tds->conn)? 2 : 1) * strlen(progname));	/* length of message */
+	tds_freeze(tds, &outer, 2); 	/* length of message */
 	if (IS_TDS50(tds->conn)) {
 		tds_put_byte(tds, 5);
 		version = 0x05000000u;
 	} else {
 		tds_put_byte(tds, 1);
 		/* see src/tds/token.c */
-		if (IS_TDS73_PLUS(tds->conn)) {
+		if (IS_TDS74_PLUS(tds->conn)) {
+			version = 0x74000004u;
+		} else if (IS_TDS73_PLUS(tds->conn)) {
 			version = 0x730B0003u;
 		} else if (IS_TDS72_PLUS(tds->conn)) {
 			version = 0x72090002u;
@@ -186,13 +197,15 @@ tds_send_login_ack(TDSSOCKET * tds, const char *progname)
 	TDS_PUT_A4BE(&ui, version);
 	tds_put_n(tds, &ui, 4);
 
-	tds_put_byte(tds, strlen(progname));
-	/* FIXME ucs2 */
-	tds_put_string(tds, progname, strlen(progname));
+	TDS_START_LEN_TINYINT(tds) {
+		tds_put_string(tds, progname, -1);
+	} TDS_END_LEN_STRING
 
 	/* server version, always big endian */
 	TDS_PUT_A4BE(&ui, tds->conn->product_version & 0x7fffffffu);
 	tds_put_n(tds, &ui, 4);
+
+	tds_freeze_close(&outer);
 }
 
 void
@@ -267,7 +280,8 @@ tds_send_control_token(TDSSOCKET * tds, TDS_SMALLINT numcols)
 		tds_put_byte(tds, 0);
 	}
 }
-void
+
+static void
 tds_send_col_name(TDSSOCKET * tds, TDSRESULTINFO * resinfo)
 {
 	int col, hdrsize = 0;
@@ -287,7 +301,8 @@ tds_send_col_name(TDSSOCKET * tds, TDSRESULTINFO * resinfo)
 		tds_put_n(tds, tds_dstr_cstr(&curcol->column_name), tds_dstr_len(&curcol->column_name));
 	}
 }
-void
+
+static void
 tds_send_col_info(TDSSOCKET * tds, TDSRESULTINFO * resinfo)
 {
 	int col, hdrsize = 0;
@@ -314,7 +329,7 @@ tds_send_col_info(TDSSOCKET * tds, TDSRESULTINFO * resinfo)
 	}
 }
 
-void
+static void
 tds_send_result(TDSSOCKET * tds, TDSRESULTINFO * resinfo)
 {
 	TDSCOLUMN *curcol;
@@ -350,11 +365,10 @@ tds_send_result(TDSSOCKET * tds, TDSRESULTINFO * resinfo)
 	}
 }
 
-void
+static TDSRET
 tds7_send_result(TDSSOCKET * tds, TDSRESULTINFO * resinfo)
 {
-	int i, j;
-	TDSCOLUMN *curcol;
+	int i;
 
 	/* TDS7+ uses TDS7_RESULT_TOKEN to send column names and info */
 	tds_put_byte(tds, TDS7_RESULT_TOKEN);
@@ -364,44 +378,24 @@ tds7_send_result(TDSSOCKET * tds, TDSRESULTINFO * resinfo)
 
 	/* send info about each column */
 	for (i = 0; i < resinfo->num_cols; i++) {
+		TDSCOLUMN *curcol = resinfo->columns[i];
 
 		/* usertype, flags, and type */
-		curcol = resinfo->columns[i];
-		tds_put_smallint(tds, curcol->column_usertype);
+		if (IS_TDS72_PLUS(tds->conn))
+			tds_put_int(tds, curcol->column_usertype);
+		else
+			tds_put_smallint(tds, curcol->column_usertype);
 		tds_put_smallint(tds, curcol->column_flags);
-		tds_put_byte(tds, curcol->column_type); /* smallint? */
+		tds_put_byte(tds, curcol->on_server.column_type);
 
-		/* bytes in "size" field varies */
-		if (is_blob_type(curcol->column_type)) {
-			tds_put_int(tds, curcol->column_size);
-		} else if (curcol->column_type>=128) { /*is_large_type*/
-			tds_put_smallint(tds, curcol->column_size);
-		} else {
-			tds_put_tinyint(tds, curcol->column_size);
-		}
+		TDS_PROPAGATE(curcol->funcs->put_info(tds, curcol));
 
-		/* some types have extra info */
-		if (is_numeric_type(curcol->column_type)) {
-			tds_put_tinyint(tds, curcol->column_prec);
-			tds_put_tinyint(tds, curcol->column_scale);
-		} else if (is_blob_type(curcol->column_type)) {
-			size_t len = tds_dstr_len(&curcol->table_name);
-			const char *name = tds_dstr_cstr(&curcol->table_name);
-
-			tds_put_smallint(tds, 2 * len);
-			for (j = 0; name[j] != '\0'; j++){
-				tds_put_byte(tds, name[j]);
-				tds_put_byte(tds, 0);
-			}
-		}
-
-		/* finally the name, in UCS16 format */
-		tds_put_byte(tds, tds_dstr_len(&curcol->column_name));
-		for (j = 0; j < tds_dstr_len(&curcol->column_name); j++) {
-			tds_put_byte(tds, tds_dstr_cstr(&curcol->column_name)[j]);
-			tds_put_byte(tds, 0);
-		}
+		/* finally the name, in UTF-16 format */
+		TDS_START_LEN_TINYINT(tds) {
+			tds_put_string(tds, tds_dstr_cstr(&curcol->column_name), tds_dstr_len(&curcol->column_name));
+		} TDS_END_LEN_STRING
 	}
+	return TDS_SUCCESS;
 }
 
 /**
@@ -414,7 +408,8 @@ tds7_send_result(TDSSOCKET * tds, TDSRESULTINFO * resinfo)
  * \param resinfo	Describes the table to be send, especially the number
  *			of columns and the names & data types of each column.
  */
-void tds_send_table_header(TDSSOCKET * tds, TDSRESULTINFO * resinfo)
+TDSRET
+tds_send_table_header(TDSSOCKET * tds, TDSRESULTINFO * resinfo)
 {
 	switch (TDS_MAJOR(tds->conn)) {
 	case 4:
@@ -433,45 +428,50 @@ void tds_send_table_header(TDSSOCKET * tds, TDSRESULTINFO * resinfo)
 		break;
 
 	case 7:
+	case 8:
 		/*
 		 * TDS7+ uses a TDS7_RESULT_TOKEN to send all column
 		 * information.
 		 */
-		tds7_send_result(tds, resinfo);
+		return tds7_send_result(tds, resinfo);
 		break;
 	}
+	return TDS_SUCCESS;
 }
 
-void
+TDSRET
 tds_send_row(TDSSOCKET * tds, TDSRESULTINFO * resinfo)
 {
-	TDSCOLUMN *curcol;
-	int colsize, i;
+	int i;
 
 	tds_put_byte(tds, TDS_ROW_TOKEN);
 	for (i = 0; i < resinfo->num_cols; i++) {
-		curcol = resinfo->columns[i];
-		if (!is_fixed_type(curcol->column_type)) {
-			/* FIX ME -- I have no way of knowing the actual length of non character variable data (eg nullable int) */
-			colsize = strlen((char *) curcol->column_data);
-			tds_put_byte(tds, colsize);
-			tds_put_n(tds, curcol->column_data, colsize);
-		} else {
-			tds_put_n(tds, curcol->column_data, tds_get_size_by_type(curcol->column_type));
-		}
+		TDSCOLUMN *curcol = resinfo->columns[i];
+
+		TDS_PROPAGATE(curcol->funcs->put_data(tds, curcol, 0));
 	}
+	return TDS_SUCCESS;
 }
 
 void
 tds71_send_prelogin(TDSSOCKET * tds)
 {
-	static const unsigned char prelogin[] = {
-		0x00, 0x00, 0x15, 0x00, 0x06, 0x01, 0x00, 0x1b,
-		0x00, 0x01, 0x02, 0x00, 0x1c, 0x00, 0x01, 0x03,
-		0x00, 0x1d, 0x00, 0x00, 0xff, 0x08, 0x00, 0x01,
-		0x55, 0x00, 0x00, 0x02, 0x00 
+	static const unsigned char prelogin_default[] = {
+		0x00, 0x00, 0x1a, 0x00, 0x06,
+		0x01, 0x00, 0x20, 0x00, 0x01,
+		0x02, 0x00, 0x21, 0x00, 0x01,
+		0x03, 0x00, 0x22, 0x00, 0x00,
+		0x04, 0x00, 0x22, 0x00, 0x01,
+		0xff,
+		0x08, 0x00, 0x01, 0x55, 0x00, 0x00,
+		0x02,
+		0x00,
+		0x00
 	};
+	unsigned char prelogin[sizeof(prelogin_default)];
 
+	memcpy(prelogin, prelogin_default, sizeof(prelogin));
+	TDS_PUT_A4BE(&prelogin[0x1a], tds->conn->product_version & 0x7fffffffu);
 	tds_put_n(tds, prelogin, sizeof(prelogin));
 }
 

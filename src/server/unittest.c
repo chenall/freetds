@@ -48,6 +48,7 @@ main(int argc, char **argv)
 	TDSSOCKET *tds;
 	TDSLOGIN *login;
 	TDSRESULTINFO *resinfo;
+	TDSCOLUMN *col;
 
 	if (argc < 2 || atoi(argv[1]) <= 0) {
 		fprintf(stderr, "syntax: %s <port>\n", argv[0]);
@@ -75,12 +76,15 @@ main(int argc, char **argv)
 			tds_env_change(tds, TDS_ENV_LANG, NULL, "us_english");
 			tds_send_msg(tds, 5703, 1, 10, "Changed language setting to 'us_english'.", "JDBC", "ZZZZZ", 1);
 		}
-		tds_env_change(tds, TDS_ENV_PACKSIZE, NULL, "512");
+		if (IS_TDS50(tds->conn))
+			tds_env_change(tds, TDS_ENV_PACKSIZE, NULL, "512");
 		/* TODO set mssql if tds7+ */
 		tds_send_login_ack(tds, "sql server");
+		if (!IS_TDS50(tds->conn))
+			tds_env_change(tds, TDS_ENV_PACKSIZE, "4096", "4096");
 		if (IS_TDS50(tds->conn))
 			tds_send_capabilities_token(tds);
-		tds_send_done_token(tds, 0, 1);
+		tds_send_done_token(tds, TDS_DONE_FINAL, 0);
 	} else {
 		/* send nack before exiting */
 		exit(1);
@@ -96,23 +100,24 @@ main(int argc, char **argv)
 		fprintf(stderr, "out of memory");
 		exit(1);
 	}
-	resinfo->columns[0]->column_type = SYBVARCHAR;
-	resinfo->columns[0]->column_size = 30;
-	if (!tds_dstr_copy(&resinfo->columns[0]->column_name, "name"))
+	col = resinfo->columns[0];
+	tds_set_column_type(tds->conn, col, SYBVARCHAR);
+	col->column_size = 30;
+	col->on_server.column_size = 30;
+	if (!tds_dstr_copy(&col->column_name, "name"))
 		exit(1);
-	resinfo->current_row = (TDS_UCHAR*) "pubs2";
-	resinfo->columns[0]->column_data = resinfo->current_row;
-	tds_send_result(tds, resinfo);
-	tds_send_control_token(tds, 1);
+	col->column_cur_size = 5;
+	col->column_data = (void *) "pubs2";
+	tds_send_table_header(tds, resinfo);
 	tds_send_row(tds, resinfo);
-	tds_send_done_token(tds, 16, 1);
+	tds_send_done_token(tds, TDS_DONE_COUNT, 1);
 	tds_flush_packet(tds);
 	tds_sleep_s(30);
 
 	tds_free_results(resinfo);
 	tds_free_socket(tds);
 	tds_free_context(ctx);
-	
+
 	return 0;
 }
 

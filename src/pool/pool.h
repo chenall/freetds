@@ -37,10 +37,6 @@
 #include <sys/time.h>
 #endif
 
-#if HAVE_POLL_H
-#include <poll.h>
-#endif /* HAVE_POLL_H */
-
 #include <freetds/tds.h>
 #include <freetds/utils/dlist.h>
 #include <freetds/replacements.h>
@@ -152,6 +148,14 @@ void pool_assign_member(TDS_POOL *pool, TDS_POOL_MEMBER * pmbr, TDS_POOL_USER *p
 void pool_deassign_member(TDS_POOL *pool, TDS_POOL_MEMBER * pmbr);
 void pool_reset_member(TDS_POOL *pool, TDS_POOL_MEMBER * pmbr);
 bool pool_packet_read(TDSSOCKET * tds);
+#if ENABLE_EXTRA_CHECKS
+void pool_mbr_check(TDS_POOL *pool);
+#else
+static inline void pool_mbr_check(TDS_POOL *pool TDS_UNUSED)
+{
+}
+#endif
+
 
 /* user.c */
 void pool_process_users(TDS_POOL * pool, struct pollfd *fds, unsigned num_fds);
