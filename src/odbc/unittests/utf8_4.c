@@ -7,7 +7,7 @@
 
 #ifdef ENABLE_ODBC_WIDE
 static void
-wide_test(const WCHAR* input, size_t input_len, const char *exp, int line)
+wide_test(const SQLWCHAR* input, size_t input_len, const char *exp, int line)
 {
 	DSTR s = DSTR_INITIALIZER;
 	SQLWCHAR outbuf[16];
@@ -31,8 +31,7 @@ wide_test(const WCHAR* input, size_t input_len, const char *exp, int line)
 }
 #endif
 
-int
-main(void)
+TEST_MAIN()
 {
 #ifdef ENABLE_ODBC_WIDE
 	DSTR s = DSTR_INITIALIZER;

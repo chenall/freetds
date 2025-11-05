@@ -21,8 +21,7 @@
  * This tests execute some command using tsql and defncopy to check behaviour
  */
 
-#undef NDEBUG
-#include <config.h>
+#include <freetds/utils/test_base.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -47,11 +46,7 @@
 
 #include <freetds/bool.h>
 #include <freetds/macros.h>
-
-static char USER[512];
-static char SERVER[512];
-static char PASSWORD[512];
-static char DATABASE[512];
+#include <freetds/sysdep_private.h>
 
 /* content of output file, from command executed */
 static char *output;
@@ -59,38 +54,7 @@ static char *output;
 static bool
 read_login_info(void)
 {
-	FILE *in = NULL;
-	char line[512];
-	char *s1, *s2;
-
-	s1 = getenv("TDSPWDFILE");
-	if (s1 && s1[0])
-		in = fopen(s1, "r");
-	if (!in)
-		in = fopen("../../../PWD", "r");
-	if (!in) {
-		fprintf(stderr, "Can not open PWD file\n\n");
-		return false;
-	}
-
-	while (fgets(line, sizeof(line), in)) {
-		s1 = strtok(line, "=");
-		s2 = strtok(NULL, "\n");
-		if (!s1 || !s2) {
-			continue;
-		}
-		if (!strcmp(s1, "UID")) {
-			strcpy(USER, s2);
-		} else if (!strcmp(s1, "SRV")) {
-			strcpy(SERVER, s2);
-		} else if (!strcmp(s1, "PWD")) {
-			strcpy(PASSWORD, s2);
-		} else if (!strcmp(s1, "DB")) {
-			strcpy(DATABASE, s2);
-		}
-	}
-	fclose(in);
-	return true;
+	return read_login_info_base(&common_pwd, DEFAULT_PWD_PATH) != NULL;
 }
 
 static void
@@ -140,18 +104,19 @@ read_file(const char *fn)
 {
 	long pos;
 	char *buf;
-	size_t readed;
+	size_t readed, size;
 
 	FILE *f = fopen(fn, "r");
 	assert(f);
 	assert(fseek(f, 0, SEEK_END) == 0);
 	pos = ftell(f);
-	assert(pos >= 0);
+	assert(pos >= 0 && pos <= 0x1000000);
+	size = (size_t) pos;
 	assert(fseek(f, 0, SEEK_SET) == 0);
-	buf = malloc(pos + 10); /* allocate some more space */
+	buf = malloc(size + 10); /* allocate some more space */
 	assert(buf);
-	readed = fread(buf, 1, pos+1, f);
-	assert(readed <= pos);
+	readed = fread(buf, 1, size + 1ul, f);
+	assert(readed <= size);
 	assert(feof(f));
 	fclose(f);
 	buf[readed] = 0;
@@ -212,14 +177,14 @@ static char *
 add_server(char *dest, char *const dest_end)
 {
 	dest = add_string(dest, dest_end, " -S ");
-	dest = quote_arg(dest, dest_end, SERVER);
+	dest = quote_arg(dest, dest_end, common_pwd.server);
 	dest = add_string(dest, dest_end, " -U ");
-	dest = quote_arg(dest, dest_end, USER);
+	dest = quote_arg(dest, dest_end, common_pwd.user);
 	dest = add_string(dest, dest_end, " -P ");
-	dest = quote_arg(dest, dest_end, PASSWORD);
-	if (DATABASE[0]) {
+	dest = quote_arg(dest, dest_end, common_pwd.password);
+	if (common_pwd.database[0]) {
 		dest = add_string(dest, dest_end, " -D ");
-		dest = quote_arg(dest, dest_end, DATABASE);
+		dest = quote_arg(dest, dest_end, common_pwd.database);
 	}
 	return dest;
 }
@@ -413,7 +378,7 @@ test_weird_index_names(void)
 	tsql(clean);
 }
 
-int main(void)
+TEST_MAIN()
 {
 	FILE *f;
 

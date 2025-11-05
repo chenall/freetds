@@ -171,7 +171,7 @@ data_generic_set_type_info(TDSCOLUMN * col, struct _drecord *drec, SQLINTEGER od
 		drec->sql_desc_display_size = col->on_server.column_size / 2;
 		drec->sql_desc_length = col->on_server.column_size / 2u;
 		if (col->char_conv) {
-			unsigned char bytes_per_char = ODBC_CLAMP(col->char_conv->to.charset.max_bytes_per_char, 2, 3);
+			unsigned char bytes_per_char = TDS_CLAMP(col->char_conv->to.charset.max_bytes_per_char, 2, 3);
 			drec->sql_desc_octet_length = (col->on_server.column_size / 2u) * bytes_per_char;
 		}
 		if (is_blob_col(col)) {
@@ -268,7 +268,7 @@ data_generic_set_type_info(TDSCOLUMN * col, struct _drecord *drec, SQLINTEGER od
 		SET_INFO2("float", "", "", odbc_ver == SQL_OV_ODBC3 ? 53 : 15);
 
 	case SYBMONEY:
-		/* TODO check money format returned by propretary ODBC, scale == 4 but we use 2 digits */
+		/* TODO check money format returned by proprietary ODBC, scale == 4 but we use 2 digits */
 		drec->sql_desc_concise_type = SQL_DECIMAL;
 		drec->sql_desc_octet_length = 21;
 		drec->sql_desc_display_size = 21;

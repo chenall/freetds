@@ -22,7 +22,7 @@ static void
 Test(int direct)
 {
 	SQLLEN ind;
-	int len = strlen(test_text), n, i;
+	int len = sizeof(test_text) - 1, n, i;
 	const char *p;
 	char *pp;
 	SQLPOINTER ptr;
@@ -63,7 +63,7 @@ Test(int direct)
 			ODBC_REPORT_ERROR("Wrong pointer from SQLParamData");
 		}
 		while (*p) {
-			int l = strlen(p);
+			int l = (int) strlen(p);
 
 			if (l < n)
 				n = l;
@@ -117,7 +117,7 @@ Test(int direct)
 	if (ptr != (SQLPOINTER) 4567)
 		ODBC_REPORT_ERROR("Wrong pointer from SQLParamData");
 	while (pb != (buf + 254)) {
-		int l = buf + 254 - pb;
+		int l = (int) (buf + 254 - pb);
 
 		if (l < n)
 			n = l;
@@ -225,13 +225,57 @@ Test(int direct)
 	/* TODO test cancel inside SQLExecute */
 }
 
-int
-main(void)
+static void
+TestOverflow(void)
 {
+	SQLLEN ind;
+	SQLPOINTER ptr;
+
+	odbc_command_with_result(odbc_stmt, "DROP TABLE #putdata");
+	odbc_command("CREATE TABLE #putdata (c VARCHAR(255) NULL)");
+
+	CHKBindParameter(1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, 30, 0, (SQLPOINTER) 123, 0, &ind, "S");
+	/* length required */
+	ind = SQL_DATA_AT_EXEC;
+
+	CHKExecDirect(T("INSERT INTO #putdata(c) VALUES(?)"), SQL_NTS, "Ne");
+
+	ptr = ((char*)0) + 0xdeadbeef;
+	CHKParamData(&ptr, "Ne");
+	if (ptr != (SQLPOINTER) 123) {
+		fprintf(stderr, "%p\n", ptr);
+		ODBC_REPORT_ERROR("Wrong pointer from SQLParamData");
+	}
+	CHKPutData((void *)test_text, 25, "S");
+	CHKPutData((void *)test_text, 6, "E");
+	odbc_read_error();
+	if (strcmp(odbc_sqlstate, "22001") != 0) {
+		fprintf(stderr, "Unexpected sql state %s returned\n", odbc_sqlstate);
+		odbc_disconnect();
+		exit(1);
+	}
+
+	/* This error is reported by the Driver Manager */
+#ifndef TDS_NO_DM
+	CHKParamData(&ptr, "E");
+	odbc_read_error();
+	if (strcmp(odbc_sqlstate, "HY010") != 0) {
+		fprintf(stderr, "Unexpected sql state %s returned\n", odbc_sqlstate);
+		odbc_disconnect();
+		exit(1);
+	}
+#endif
+}
+
+TEST_MAIN()
+{
+	odbc_use_version3 = true;
 	odbc_connect();
 
 	Test(0);
 	Test(1);
+
+	TestOverflow();
 
 	odbc_disconnect();
 

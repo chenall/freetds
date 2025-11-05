@@ -50,10 +50,10 @@ TestBinding(int minimun)
 		SQLLEN s1_len, s2_len;
 		unsigned int len;
 
-		len = minimun ? (strlen(strings_hex[p-strings]) - 2) /4 : 40;
+		len = minimun ? ((int) strlen(strings_hex[p-strings]) - 2) / 4 : 40;
 		CHKBindParameter(2, SQL_PARAM_INPUT, SQL_C_CHAR,
 			SQL_WCHAR, len, 0, (void *) p[0], 0, &s1_len, "S");
-		len = minimun ? (strlen(strings_hex[p+1-strings]) - 2) /4 : 40;
+		len = minimun ? ((int) strlen(strings_hex[p+1-strings]) - 2) / 4 : 40;
 		/* FIXME this with SQL_VARCHAR produce wrong protocol data */
 		CHKBindParameter(3, SQL_PARAM_INPUT, SQL_C_CHAR,
 			SQL_WVARCHAR, len, 0, (void *) p[1], 0, &s2_len, "S");
@@ -72,13 +72,12 @@ TestBinding(int minimun)
 	odbc_reset_statement();
 }
 
-int
-main(void)
+TEST_MAIN()
 {
 	const char * const*p;
 	SQLINTEGER n;
 
-	odbc_use_version3 = 1;
+	odbc_use_version3 = true;
 	odbc_conn_additional_params = "ClientCharset=UTF-8;";
 
 	odbc_connect();
@@ -131,8 +130,7 @@ main(void)
 
 #else
 
-int
-main(void)
+TEST_MAIN()
 {
 	/* on Windows SQLExecDirect is always converted to SQLExecDirectW by the DM */
 	printf("Not possible for this platform.\n");

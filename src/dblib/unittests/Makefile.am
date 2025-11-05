@@ -105,12 +105,14 @@ noinst_LIBRARIES = libcommon.a
 libcommon_a_SOURCES = common.c common.h
 
 AM_CPPFLAGS	= 	-DFREETDS_TOPDIR=\"$(top_srcdir)\" -I$(top_srcdir)/include
-if MINGW32
+if FAST_INSTALL
 AM_LDFLAGS	=	-no-fast-install
 else
 AM_LDFLAGS	=	-no-install -L../.libs -R "$(abs_builddir)/../.libs"
 endif
-LDADD		=	libcommon.a ../libsybdb.la ../../replacements/libreplacements.la $(LTLIBICONV)
+LDADD		=	libcommon.a ../../utils/unittests/libtds_test_base.a \
+			../libsybdb.la ../../replacements/libreplacements.la \
+			$(LTLIBICONV)
 EXTRA_DIST	=	CMakeLists.txt
 CLEANFILES	=	tdsdump.out t0013.out t0014.out t0016.out \
 				t0016.err t0017.err t0017.out

@@ -1,15 +1,14 @@
 #include "common.h"
 
 /* protos */
-int do_fetch(CS_COMMAND * cmd);
-CS_RETCODE do_results(CS_COMMAND * cmd, CS_INT * results);
+static int do_fetch(CS_COMMAND * cmd);
+static CS_RETCODE do_results(CS_COMMAND * cmd, CS_INT * results);
 
 /* defines */
 #define NUMROWS 5
 
 /* Testing: Test order of ct_results() */
-int
-main(void)
+TEST_MAIN()
 {
 	CS_CONTEXT *ctx;
 	CS_CONNECTION *conn;
@@ -90,11 +89,11 @@ main(void)
 	return 0;
 }
 
-int
+static int
 do_fetch(CS_COMMAND * cmd)
 {
-CS_INT count, row_count = 0;
-CS_RETCODE ret;
+	CS_INT count, row_count = 0;
+	CS_RETCODE ret;
 
 	while ((ret = ct_fetch(cmd, CS_UNUSED, CS_UNUSED, CS_UNUSED, &count)) == CS_SUCCEED) {
 		row_count += count;
@@ -110,17 +109,22 @@ CS_RETCODE ret;
 	}
 }
 
-CS_RETCODE
+static CS_RETCODE
 do_results(CS_COMMAND * cmd, CS_INT * results)
 {
-int result_num;
-CS_RETCODE results_ret, result_type;
+	int result_num;
+	CS_RETCODE results_ret, result_type;
+	bool done = false;
 
 	result_num = 0;
 	while ((results_ret = ct_results(cmd, &result_type)) == CS_SUCCEED) {
 		printf("result_ret %d result_type %d\n", results_ret, result_type);
 		if (result_type == CS_STATUS_RESULT)
 			continue;
+		if (done) {
+			fputs("No further results were expected\n", stderr);
+			return CS_FAIL;
+		}
 		if (result_type != results[result_num]) {
 			fprintf(stderr, "ct_results() expected %d received %d\n", results[result_num], result_type);
 			return CS_FAIL;
@@ -131,8 +135,15 @@ CS_RETCODE results_ret, result_type;
 				return CS_FAIL;
 			}
 			break;
+		case CS_CMD_DONE:
+			done = true;
+			break;
 		}
 		result_num++;
+	}
+	if ( !done ) {
+		fputs("Never saw CS_CMD_DONE\n", stderr);
+		return CS_FAIL;
 	}
 	return results_ret;
 }

@@ -14,15 +14,14 @@ end
 
 static void extract_error(SQLHANDLE handle, SQLSMALLINT type);
 
-int
-main(void)
+TEST_MAIN()
 {
 	int i;
 	char cmd[128 + 110*10];
 
 	printf("SQLWCHAR size is: %d\n", (int) sizeof(SQLWCHAR));
 
-	odbc_use_version3 = 1;
+	odbc_use_version3 = true;
 	odbc_connect();
 
 	/* this test do not work with Sybase */
@@ -48,7 +47,7 @@ main(void)
 static void
 extract_error(SQLHANDLE handle, SQLSMALLINT type)
 {
-	SQLINTEGER i = 0;
+	SQLSMALLINT i = 0;
 	SQLINTEGER native;
 	SQLTCHAR state[7];
 	SQLTCHAR text[256];

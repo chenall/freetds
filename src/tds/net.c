@@ -705,10 +705,11 @@ tds_select(TDSSOCKET * tds, unsigned tds_sel, int timeout_seconds)
  * @TODO remove tds, save error somewhere, report error in another way
  * @returns 0 if blocking, <0 error >0 bytes read
  */
-static int
-tds_socket_read(TDSCONNECTION * conn, TDSSOCKET *tds, unsigned char *buf, int buflen)
+static ptrdiff_t
+tds_socket_read(TDSCONNECTION * conn, TDSSOCKET *tds, unsigned char *buf, size_t buflen)
 {
-	int len, err;
+	ptrdiff_t len;
+	int err;
 
 #if ENABLE_EXTRA_CHECKS
 	/* this simulate the fact that recv can return less bytes */
@@ -740,10 +741,11 @@ tds_socket_read(TDSCONNECTION * conn, TDSSOCKET *tds, unsigned char *buf, int bu
  * Write to an OS socket
  * @returns 0 if blocking, <0 error >0 bytes readed
  */
-static int
-tds_socket_write(TDSCONNECTION *conn, TDSSOCKET *tds, const unsigned char *buf, int buflen)
+static ptrdiff_t
+tds_socket_write(TDSCONNECTION *conn, TDSSOCKET *tds, const unsigned char *buf, size_t buflen)
 {
-	int err, len;
+	int err;
+	ptrdiff_t len;
 	char *errstr;
 
 #if ENABLE_EXTRA_CHECKS
@@ -754,6 +756,14 @@ tds_socket_write(TDSCONNECTION *conn, TDSSOCKET *tds, const unsigned char *buf, 
 			cnt = 0;
 			buflen -= 3;
 		}
+	}
+#endif
+
+#ifdef USE_CORK
+	if (!conn->corked) {
+		int opt = 1;
+		setsockopt(conn->s, SOL_TCP, TCP_CORK, (const void *) &opt, sizeof(opt));
+		conn->corked = true;
 	}
 #endif
 
@@ -837,7 +847,7 @@ tds_wakeup_send(TDSPOLLWAKEUP *wakeup, char cancel)
 static int
 tds_connection_signaled(TDSCONNECTION *conn)
 {
-	int len;
+	ptrdiff_t len;
 	char to_cancel[16];
 
 #if defined(__linux__) && HAVE_EVENTFD
@@ -894,14 +904,15 @@ tds_check_cancel(TDSCONNECTION *conn)
  * Loops until we have received some characters
  * return -1 on failure
  */
-int
-tds_goodread(TDSSOCKET * tds, unsigned char *buf, int buflen)
+ptrdiff_t
+tds_goodread(TDSSOCKET * tds, unsigned char *buf, size_t buflen)
 {
 	if (tds == NULL || buf == NULL || buflen < 1)
 		return -1;
 
 	for (;;) {
-		int len, err;
+		ptrdiff_t len;
+		int err;
 
 		/* FIXME this block writing from other sessions */
 		len = tds_select(tds, TDSSELREAD, tds->query_timeout);
@@ -943,8 +954,8 @@ tds_goodread(TDSSOCKET * tds, unsigned char *buf, int buflen)
 	}
 }
 
-int
-tds_connection_read(TDSSOCKET * tds, unsigned char *buf, int buflen)
+ptrdiff_t
+tds_connection_read(TDSSOCKET * tds, unsigned char *buf, size_t buflen)
 {
 	TDSCONNECTION *conn = tds->conn;
 
@@ -965,10 +976,10 @@ tds_connection_read(TDSSOCKET * tds, unsigned char *buf, int buflen)
  * \param last 1 if this is the last packet, else 0
  * \return length written (>0), <0 on failure
  */
-int
+ptrdiff_t
 tds_goodwrite(TDSSOCKET * tds, const unsigned char *buffer, size_t buflen)
 {
-	int len;
+	ptrdiff_t len;
 	size_t sent = 0;
 
 	assert(tds && buffer);
@@ -1019,21 +1030,37 @@ tds_goodwrite(TDSSOCKET * tds, const unsigned char *buffer, size_t buflen)
 }
 
 void
-tds_socket_flush(TDS_SYS_SOCKET sock TDS_UNUSED)
+tds_connection_coalesce(TDSSOCKET *tds TDS_UNUSED)
 {
 #ifdef USE_CORK
-	int opt;
-	opt = 0;
-	setsockopt(sock, SOL_TCP, TCP_CORK, (const void *) &opt, sizeof(opt));
-	opt = 1;
-	setsockopt(sock, SOL_TCP, TCP_CORK, (const void *) &opt, sizeof(opt));
+	TDSCONNECTION *conn = tds->conn;
+
+	if (!conn->corked) {
+		int opt = 1;
+		setsockopt(conn->s, SOL_TCP, TCP_CORK, (const void *) &opt, sizeof(opt));
+		conn->corked = true;
+	}
 #endif
 }
 
-int
-tds_connection_write(TDSSOCKET *tds, const unsigned char *buf, int buflen, int final)
+void
+tds_connection_flush(TDSSOCKET *tds TDS_UNUSED)
 {
-	int sent;
+#ifdef USE_CORK
+	TDSCONNECTION *conn = tds->conn;
+
+	if (conn->corked) {
+		int opt = 0;
+		setsockopt(conn->s, SOL_TCP, TCP_CORK, (const void *) &opt, sizeof(opt));
+		conn->corked = false;
+	}
+#endif
+}
+
+ptrdiff_t
+tds_connection_write(TDSSOCKET *tds, const unsigned char *buf, size_t buflen, int final)
+{
+	ptrdiff_t sent;
 	TDSCONNECTION *conn = tds->conn;
 
 #if !defined(_WIN32) && !defined(MSG_NOSIGNAL) && !defined(DOS32X) && !defined(SO_NOSIGPIPE)
@@ -1056,7 +1083,7 @@ tds_connection_write(TDSSOCKET *tds, const unsigned char *buf, int buflen, int f
 
 	/* force packet flush */
 	if (final && sent >= buflen)
-		tds_socket_flush(tds_get_s(tds));
+		tds_connection_flush(tds);
 
 #if !defined(_WIN32) && !defined(MSG_NOSIGNAL) && !defined(DOS32X) && !defined(SO_NOSIGPIPE)
 	if (signal(SIGPIPE, oldsig) == SIG_ERR) {
@@ -1079,7 +1106,7 @@ tds7_get_instance_ports(FILE *output, struct addrinfo *addr)
 	int retval;
 	TDS_SYS_SOCKET s;
 	char msg[16*1024];
-	int msg_len = 0;
+	ptrdiff_t msg_len = 0;
 	int port = 0;
 	char ipaddr[128];
 
@@ -1215,7 +1242,7 @@ tds7_get_instance_port(struct addrinfo *addr, const char *instance)
 	int retval;
 	TDS_SYS_SOCKET s;
 	char msg[1024];
-	int msg_len;
+	ptrdiff_t msg_len;
 	int port = 0;
 	char ipaddr[128];
 
@@ -1332,7 +1359,7 @@ tds7_get_instance_port(struct addrinfo *addr, const char *instance)
 				}
 			}
 			if (port_ok && instance_ok) {
-				port = l;
+				port = (int) l;
 				break;
 			}
 		}

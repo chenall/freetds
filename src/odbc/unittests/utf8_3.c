@@ -3,15 +3,14 @@
 
 /* test conversion using SQLGetData */
 
-int
-main(void)
+TEST_MAIN()
 {
 	SQLLEN len;
 	unsigned char buf[30];
 	static const char expected[] = "\xf0\x9f\x8e\x84";
 	int i;
 
-	odbc_use_version3 = 1;
+	odbc_use_version3 = true;
 	odbc_conn_additional_params = "ClientCharset=UTF-8;";
 
 	odbc_connect();

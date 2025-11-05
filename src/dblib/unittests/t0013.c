@@ -5,15 +5,17 @@
 
 #include "common.h"
 
+#include <freetds/bool.h>
+
 #define BLOB_BLOCK_SIZE 4096
 
-int failed = 0;
+static bool failed = false;
 
 #define TABLE_NAME "freetds_dblib_t0013"
 
-char *testargs[] = { "", FREETDS_SRCDIR "/data.bin", "t0013.out" };
+static char *testargs[] = { "", FREETDS_SRCDIR "/data.bin", "t0013.out" };
 
-DBPROCESS *dbproc, *dbprocw;
+static DBPROCESS *dbproc, *dbprocw;
 
 static void
 drop_table(void)
@@ -31,18 +33,19 @@ drop_table(void)
 }
 
 static int
-test(int argc, char **argv, int over4k)
+test(int argc, char **argv, bool over4k)
 {
 	LOGINREC *login;
 	int i;
 	DBINT testint;
 	FILE *fp;
-	long result, isiz;
+	ptrdiff_t result;
+	long isiz;
 	char *blob, *rblob;
 	DBBINARY *textPtr = NULL, *timeStamp = NULL;
 	char objname[256];
 	char rbuf[BLOB_BLOCK_SIZE];
-	long numread;
+	size_t numread;
 	int data_ok;
 	int numtowrite, numwritten;
 	set_malloc_options();
@@ -128,6 +131,7 @@ test(int argc, char **argv, int over4k)
 	}
 	assert(REG_ROW == result || 0 < i);
 
+#ifdef DBTDS_7_2
 	if (!textPtr && !timeStamp && dbtds(dbproc) >= DBTDS_7_2) {
 		printf("Protocol 7.2+ detected, test not supported\n");
 		free(blob);
@@ -136,6 +140,7 @@ test(int argc, char **argv, int over4k)
 		dbexit();
 		exit(0);
 	}
+#endif
 
 	if (!textPtr) {
 		fprintf(stderr, "Error getting textPtr\n");
@@ -194,7 +199,7 @@ test(int argc, char **argv, int over4k)
 	dbsqlexec(dbproc);
 
 	if (dbresults(dbproc) != SUCCEED) {
-		failed = 1;
+		failed = true;
 		printf("Was expecting a result set.");
 		exit(1);
 	}
@@ -218,7 +223,7 @@ test(int argc, char **argv, int over4k)
 		exit(1);
 	}
 	if (testint != 1) {
-		failed = 1;
+		failed = true;
 		fprintf(stderr, "Failed.  Expected i to be %d, was %d\n", 1, (int) testint);
 		exit(1);
 	}
@@ -241,14 +246,20 @@ test(int argc, char **argv, int over4k)
 	numread = 0;
 	rblob = NULL;
 	while ((result = dbreadtext(dbproc, rbuf, BLOB_BLOCK_SIZE)) != NO_MORE_ROWS) {
+		assert(result >= 0);
 		if (result != 0) {	/* this indicates not end of row */
 			rblob = (char*) realloc(rblob, result + numread);
+			assert(rblob);
 			memcpy((void *) (rblob + numread), (void *) rbuf, result);
 			numread += result;
 		}
 	}
 
 	data_ok = 1;
+	if (rblob == NULL) {
+		fputs("No blob data received", stderr);
+		return 7;
+	}
 	if (memcmp(blob, rblob, numread) != 0) {
 		printf("Saving first blob data row to file: %s\n", argv[2]);
 		if ((fp = fopen(argv[2], "wb")) == NULL) {
@@ -259,16 +270,16 @@ test(int argc, char **argv, int over4k)
 		}
 		fwrite((void *) rblob, numread, 1, fp);
 		fclose(fp);
-		failed = 1;
+		failed = true;
 		data_ok = 0;
 	}
 
-	printf("Read blob data row %d --> %s %ld byte comparison\n",
-	       (int) testint, data_ok ? "PASSED" : "failed", numread);
+	printf("Read blob data row %d --> %s %lu byte comparison\n",
+	       (int) testint, data_ok ? "PASSED" : "failed", (long unsigned int) numread);
 	free(rblob);
 
 	if (dbnextrow(dbproc) != NO_MORE_ROWS) {
-		failed = 1;
+		failed = true;
 		fprintf(stderr, "Was expecting no more rows\n");
 		exit(1);
 	}
@@ -283,12 +294,11 @@ test(int argc, char **argv, int over4k)
 	return 0;
 }
 
-int
-main(int argc, char **argv)
+TEST_MAIN()
 {
-	int res = test(argc, argv, 0);
+	int res = test(argc, argv, false);
 	if (!res)
-		res = test(argc, argv, 1);
+		res = test(argc, argv, true);
 	if (res)
 		return res;
 

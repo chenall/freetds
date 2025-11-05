@@ -39,8 +39,6 @@
 # include <errno.h>
 #endif /* HAVE_ERRNO_H */
 
-#include <assert.h>
-
 #include <freetds/tds.h>
 #include <freetds/convert.h>
 #include <freetds/utils/string.h>
@@ -349,8 +347,7 @@ param_row_alloc(TDSPARAMINFO * params, TDSCOLUMN * curcol, int param_num, void *
 				return NULL;
 			memcpy(blob->textvalue, value, size);
 		}
-	}
-	else {
+	} else {
 		tdsdump_log(TDS_DBG_FUNC, "setting parameter #%d to NULL\n", param_num);
 		curcol->column_cur_size = -1;
 	}

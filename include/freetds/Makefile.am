@@ -36,6 +36,7 @@ noinst_HEADERS = \
 	utils/smp.h \
 	utils/path.h \
 	utils/nosigpipe.h \
+	utils/test_base.h \
 	replacements.h \
 	replacements/poll.h \
 	replacements/readpassphrase.h \
@@ -48,7 +49,7 @@ DISTCLEANFILES = sysconfdir.h \
 sysconfdir.h: Makefile
 	echo '#define FREETDS_SYSCONFDIR "$(sysconfdir)"' >$@
 
-all-am: sysconfdir.h
+all-am: sysconfdir.h odbc_attributes_sorted
 
 GENERATED_HEADER_FILES = encodings.h charset_lookup.h
 EXTRA_DIST = $(GENERATED_HEADER_FILES)
@@ -64,4 +65,11 @@ charset_lookup.h: encodings.h
 encodings.h: encodings.pl alternative_character_sets.h character_sets.h Makefile
 	perl $(srcdir)/encodings.pl $(srcdir) $(GPERF) > $@.tmp 2> /dev/null
 	mv $@.tmp $@
+
+odbc_attributes_sorted: odbc_attributes.pl odbc.h Makefile
+	perl $(srcdir)/odbc_attributes.pl $(srcdir)
+	touch $@
+else
+odbc_attributes_sorted: odbc.h Makefile
+	touch $@
 endif

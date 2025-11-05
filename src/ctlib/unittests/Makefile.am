@@ -38,6 +38,8 @@ TESTS = \
 	variant$(EXEEXT) \
 	errors$(EXEEXT) \
 	ct_command$(EXEEXT) \
+	timeout$(EXEEXT) \
+	has_for_update$(EXEEXT) \
 	$(NULL)
 
 check_PROGRAMS	=	$(TESTS)
@@ -64,7 +66,7 @@ ct_diagserver_SOURCES	= ct_diagserver.c
 ct_diagall_SOURCES	= ct_diagall.c
 cs_config_SOURCES	= cs_config.c
 cancel_SOURCES		= cancel.c
-blk_in_SOURCES		= blk_in.h blk_in.c
+blk_in_SOURCES		= blk_in.c blk_in.in
 blk_out_SOURCES		= blk_out.c
 ct_cursor_SOURCES	= ct_cursor.c
 ct_cursors_SOURCES	= ct_cursors.c
@@ -81,16 +83,20 @@ will_convert_SOURCES	= will_convert.c
 variant_SOURCES		= variant.c
 errors_SOURCES		= errors.c
 ct_command_SOURCES	= ct_command.c
+timeout_SOURCES         = timeout.c
+has_for_update_SOURCES  = has_for_update.c
 
 noinst_LIBRARIES = libcommon.a
 libcommon_a_SOURCES = common.c common.h
 
-AM_CPPFLAGS	=	-I$(top_srcdir)/include
-if MINGW32
+AM_CPPFLAGS	= 	-DFREETDS_TOPDIR=\"$(top_srcdir)\" -I$(top_srcdir)/include
+if FAST_INSTALL
 AM_LDFLAGS	=	-no-fast-install
 else
 AM_LDFLAGS	=	-no-install -L../.libs -R "$(abs_builddir)/../.libs"
 endif
-LDADD		=	libcommon.a ../libct.la ../../replacements/libreplacements.la $(LTLIBICONV)
+LDADD		=	libcommon.a ../../utils/unittests/libtds_test_base.a \
+			../libct.la ../../replacements/libreplacements.la \
+			$(LTLIBICONV)
 CLEANFILES	=	tdsdump.out
 EXTRA_DIST	=	CMakeLists.txt

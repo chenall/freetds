@@ -8,15 +8,14 @@
 
 #include "common.h"
 
-int
-main(void)
+TEST_MAIN()
 {
 #define ARRAY_SIZE 10
 	SQLCHAR v_dec[ARRAY_SIZE][21];
 	SQLLEN v_ind[ARRAY_SIZE];
 	SQLULEN nrows;
 
-	odbc_use_version3 = 1;
+	odbc_use_version3 = true;
 	odbc_connect();
 	odbc_check_cursor();
 

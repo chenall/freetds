@@ -60,7 +60,7 @@ endif()
 # get build number from date
 # use same formula used in configure.ac
 unset(BUILD_NUMBER)
-string(TIMESTAMP BUILD_NUMBER "( %Y - 2023 ) * 366 + 1%j - 1000")
+string(TIMESTAMP BUILD_NUMBER "( %Y - 2025 ) * 366 + 1%j - 1000")
 math(EXPR BUILD_NUMBER "${BUILD_NUMBER}")
 
 set(FREETDS_TOPDIR ${CMAKE_CURRENT_LIST_DIR})
@@ -197,7 +197,7 @@ add_header(HAVE_WCHAR_H wchar.h)
 add_header(HAVE_WINDOWS_H windows.h)
 add_header(HAVE_SQL_H sql.h)
 add_header(HAVE_SQLEXT_H sqlext.h)
-foreach(fn char double float int short long "long double" "long long" "SQLWCHAR" "void *" wchar_t __int64 __int128
+foreach(fn char double float int short long "long int" "long double" "long long" "SQLWCHAR" "void *" wchar_t __int64 __int128
 	  SQLLEN SQLROWOFFSET SQLROWSETSIZE SQLSETPOSIROW)
 	string(REGEX REPLACE "[/. ]" "_" var "${fn}")
 	string(REPLACE "*" "P" var "${var}")
@@ -212,8 +212,11 @@ foreach(fn char double float int short long "long double" "long long" "SQLWCHAR"
 	config_write("#define ${var} \\@${var}\\@\n\n")
 endforeach(fn)
 
-foreach(fn SQLLEN SQLROWOFFSET SQLROWSETSIZE SQLSETPOSIROW)
-	config_write("/* Define to 1 if you have type <${fn}>. */\n#cmakedefine HAVE_${fn} 1\n\n")
+foreach(fn "long long" SQLLEN SQLROWOFFSET SQLROWSETSIZE SQLSETPOSIROW)
+	string(REGEX REPLACE "[/. ]" "_" var "${fn}")
+	string(REPLACE "*" "P" var "${var}")
+	string(TOUPPER "${var}" var)
+	config_write("/* Define to 1 if you have type <${fn}>. */\n#cmakedefine HAVE_${var} 1\n\n")
 endforeach(fn)
 
 check_prototype_definition(SQLColAttribute
@@ -397,6 +400,7 @@ else(WIN32)
 			check_function_exists_define(gnutls_record_disable_padding)
 			check_function_exists_define(gnutls_rnd)
 			check_function_exists_define(gnutls_alpn_set_protocols)
+			check_function_exists_define(gnutls_set_default_priority_append)
 			set(CMAKE_REQUIRED_LIBRARIES)
 			pkg_check_modules(NETTLEDEP gnutls)
 			if (";${NETTLEDEP_STATIC_LIBRARIES};" MATCHES ";nettle;")
@@ -458,8 +462,10 @@ endif()
 if(WIN32)
 	set(lib_NETWORK ws2_32 crypt32)
 else(WIN32)
-	# TODO check libraries
-	set(lib_NETWORK gssapi_krb5)
+	if(ENABLE_KRB5)
+		# TODO check libraries
+		set(lib_NETWORK gssapi_krb5)
+	endif()
 endif(WIN32)
 
 if(OPENSSL_FOUND)

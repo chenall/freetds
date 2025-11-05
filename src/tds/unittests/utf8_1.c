@@ -177,15 +177,14 @@ test(const char *type, const char *test_name)
 	 */
 }
 
-int
-main(void)
+TEST_MAIN()
 {
 	TDSLOGIN *login;
 	int ret;
 	int verbose = 0;
 
 	/* use UTF-8 as our coding */
-	strcpy(CHARSET, "UTF-8");
+	strcpy(common_pwd.charset, "UTF-8");
 
 	ret = try_tds_login(&login, &tds, __FILE__, verbose);
 	if (ret != TDS_SUCCESS) {
@@ -196,11 +195,11 @@ main(void)
 	if (IS_TDS7_PLUS(tds->conn)) {
 		char type[32];
 		char buf[1024];
-		int i, len;
+		size_t len;
 
 		strcpy(buf, "aaa");
 		len = 0;
-		for (i = 0; strlen(buf) < 980 && len < 200; ++i) {
+		while (strlen(buf) < 980 && len < 200) {
 			char tmp[256];
 
 			strcat(buf, japanese);

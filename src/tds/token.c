@@ -32,8 +32,6 @@
 #include <stdlib.h>
 #endif /* HAVE_STDLIB_H */
 
-#include <assert.h>
-
 #if HAVE_MALLOC_H
 #include <malloc.h>
 #endif /* HAVE_MALLOC_H */
@@ -88,7 +86,7 @@ static TDSRET tds_process_params_result_token(TDSSOCKET * tds);
 static TDSRET tds_process_dyn_result(TDSSOCKET * tds);
 static TDSRET tds5_process_result2(TDSSOCKET * tds);
 static TDSRET tds5_process_dyn_result2(TDSSOCKET * tds);
-static TDSRET tds_process_default_tokens(TDSSOCKET * tds, int marker);
+static TDSRET tds_process_default_tokens(TDSSOCKET * tds, uint8_t marker);
 static TDSRET tds5_process_optioncmd(TDSSOCKET * tds);
 static TDSRET tds_process_end(TDSSOCKET * tds, int marker, /*@out@*/ int *flags_parm);
 
@@ -119,9 +117,9 @@ static int tds_alloc_get_string(TDSSOCKET * tds, /*@special@*/ char **string, si
  * @param marker Token type
  */
 static TDSRET
-tds_process_default_tokens(TDSSOCKET * tds, int marker)
+tds_process_default_tokens(TDSSOCKET * tds, uint8_t marker)
 {
-	int tok_size;
+	unsigned int tok_size;
 	int done_flags;
 	TDS_INT ret_status;
 	TDS_CAPABILITY_TYPE *cap;
@@ -382,7 +380,7 @@ tds_process_loginack(TDSSOCKET *tds, TDSRET *login_succeeded)
 	if (ver.major == 4 && ver.minor == 2 && (product_version & 0xff0000ffu) == 0x5f0000ffu)
 		product_version = ((product_version & 0xffff00u) | 0x800000u) << 8;
 	tds->conn->product_version = product_version;
-	tdsdump_log(TDS_DBG_FUNC, "Product version %lX\n", (unsigned long) product_version);
+	tdsdump_log(TDS_DBG_FUNC, "Product version %#lx\n", (unsigned long) product_version);
 
 	/* internal version is ignored for TDS 8.0+ */
 	if (orig_tds_version >= 0x800)
@@ -416,7 +414,7 @@ TDSRET
 tds_process_login_tokens(TDSSOCKET * tds)
 {
 	TDSRET succeed = TDS_FAIL;
-	int marker;
+	uint8_t marker;
 
 	CHECK_TDS_EXTRA(tds);
 
@@ -535,7 +533,7 @@ tds_process_auth(TDSSOCKET * tds)
 TDSRET
 tds_process_tokens(TDSSOCKET *tds, TDS_INT *result_type, int *done_flags, unsigned flag)
 {
-	int marker;
+	uint8_t marker;
 	TDSPARAMINFO *pinfo = NULL;
 	TDSCOLUMN   *curcol;
 	TDSRET rc;
@@ -1075,7 +1073,7 @@ tds_process_col_fmt(TDSSOCKET * tds)
 		if (TDS_IS_MSSQL(tds)) {
 			curcol->column_usertype = tds_get_smallint(tds);
 			flags = tds_get_usmallint(tds);
-			curcol->column_nullable = flags & 0x01;
+			curcol->column_nullable = (flags & 0x01) > 0;
 			curcol->column_writeable = (flags & 0x08) > 0;
 			curcol->column_identity = (flags & 0x10) > 0;
 		} else {
@@ -2462,7 +2460,7 @@ tds_process_info(TDSSOCKET * tds, int marker)
 
 	/* In case extended error data is sent, we just try to discard it */
 	if (has_eed == 1) {
-		int next_marker;
+		uint8_t next_marker;
 		for (;;) {
 			switch (next_marker = tds_get_byte(tds)) {
 			case TDS5_PARAMFMT_TOKEN:
@@ -2491,7 +2489,7 @@ tds_process_info(TDSSOCKET * tds, int marker)
 	/* special case, */
 	if (marker == TDS_EED_TOKEN && tds->cur_dyn && !TDS_IS_MSSQL(tds) && msg.msgno == 2782) {
 		/* we must emulate prepare */
-		tds->cur_dyn->emulated = 1;
+		tds->cur_dyn->emulated = true;
 		tds_dynamic_deallocated(tds->conn, tds->cur_dyn);
 	} else if (marker == TDS_INFO_TOKEN && msg.msgno == 16954 && TDS_IS_MSSQL(tds)
 		   && tds->current_op == TDS_OP_CURSOROPEN && tds->cur_cursor) {
@@ -2632,7 +2630,7 @@ tds_process_dynamic(TDSSOCKET * tds)
 		drain = id_len - TDS_MAX_DYNID_LEN;
 		id_len = TDS_MAX_DYNID_LEN;
 	}
-	id_len = tds_get_string(tds, id_len, id, TDS_MAX_DYNID_LEN);
+	id_len = (TDS_TINYINT) tds_get_string(tds, id_len, id, TDS_MAX_DYNID_LEN);
 	id[id_len] = '\0';
 	if (drain) {
 		tds_get_n(tds, NULL, drain);
@@ -3058,6 +3056,7 @@ tds_prtype(int type)
 		TYPE(SYBFLT8, "float");
 		TYPE(SYBFLTN, "float-null");
 		TYPE(SYBIMAGE, "image");
+		TYPE(SYBSINT1, "signed tinyint");
 		TYPE(SYBINT1, "tinyint");
 		TYPE(SYBINT2, "smallint");
 		TYPE(SYBINT4, "int");

@@ -19,7 +19,7 @@ init_connect(void)
 static void
 normal_connect(void)
 {
-	CHKConnect(T(odbc_server), SQL_NTS, T(odbc_user), SQL_NTS, T(odbc_password), SQL_NTS, "SI");
+	CHKConnect(T(common_pwd.server), SQL_NTS, T(common_pwd.user), SQL_NTS, T(common_pwd.password), SQL_NTS, "SI");
 }
 
 static void
@@ -56,11 +56,11 @@ check_dbname(const char *dbname)
 static void
 set_dbname(const char *dbname)
 {
-	CHKSetConnectAttr(SQL_ATTR_CURRENT_CATALOG, (SQLPOINTER) T(dbname), strlen(dbname)*sizeof(SQLTCHAR), "SI");
+	CHKSetConnectAttr(SQL_ATTR_CURRENT_CATALOG, (SQLPOINTER) T(dbname),
+			  (SQLINTEGER) strlen(dbname) * sizeof(SQLTCHAR), "SI");
 }
 
-int
-main(void)
+TEST_MAIN()
 {
 	char tmp[1024*3];
 
@@ -81,7 +81,7 @@ main(void)
 
 	printf("SQLConnect after not existing..\n");
 	strcpy(tmp, "IDontExist");
-	CHKSetConnectAttr(SQL_ATTR_CURRENT_CATALOG, (SQLPOINTER) tmp, strlen(tmp), "E");
+	CHKSetConnectAttr(SQL_ATTR_CURRENT_CATALOG, (SQLPOINTER) tmp, (SQLINTEGER) strlen(tmp), "E");
 	check_dbname("tempdb");
 
 	odbc_disconnect();
@@ -96,16 +96,17 @@ main(void)
 
 	/* try connect string with using DSN */
 	printf("SQLDriverConnect before 1..\n");
-	sprintf(tmp, "DSN=%s;UID=%s;PWD=%s;DATABASE=%s;", odbc_server, odbc_user, odbc_password, odbc_database);
+	sprintf(tmp, "DSN=%s;UID=%s;PWD=%s;DATABASE=%s;", common_pwd.server,
+		common_pwd.user, common_pwd.password, common_pwd.database);
 	init_connect();
 	set_dbname("master");
 	driver_connect(tmp);
-	check_dbname(odbc_database);
+	check_dbname(common_pwd.database);
 	odbc_disconnect();
 
 	/* try connect string with using DSN */
 	printf("SQLDriverConnect before 2..\n");
-	sprintf(tmp, "DSN=%s;UID=%s;PWD=%s;", odbc_server, odbc_user, odbc_password);
+	sprintf(tmp, "DSN=%s;UID=%s;PWD=%s;", common_pwd.server, common_pwd.user, common_pwd.password);
 	init_connect();
 	set_dbname("tempdb");
 	driver_connect(tmp);

@@ -11,7 +11,7 @@ dnl ------------------------------------------------------------
 # ------------------------------------------------------------
 # Initialization
 # ------------------------------------------------------------
-AC_INIT(FreeTDS, 1.5.dev.esyscmd(printf $(date +"%Y%m%d")))
+AC_INIT(FreeTDS, 1.6.dev.esyscmd(printf $(date +"%Y%m%d")))
 AC_CONFIG_SRCDIR(src/dblib/dblib.c)
 AC_PREREQ(2.53)
 
@@ -41,7 +41,7 @@ fi
 MAJOR=[`echo $ver | sed "s,$match,\1,"`]
 MINOR=[`echo $ver | sed "s,$match,\2,"`]
 SUBVERSION=[`echo $ver | sed "s,$match,\3,"`]
-BUILD_NUMBER="`date +1%j` - 1000 + ( `date +%Y` - 2023 )"
+BUILD_NUMBER="`date +1%j` - 1000 + ( `date +%Y` - 2025 )"
 BUILD_NUMBER="`expr $BUILD_NUMBER \* 366`"
 if test "$SUBVERSION" = "9999"; then
 	MINOR=`expr $MINOR - 1`
@@ -82,14 +82,13 @@ case $host in
     ;;
 esac
 
+tds_macosx=no
 case $host_os in
   darwin* | rhapsody*)
-    AM_CONDITIONAL(MACOSX, true)
-    ;;
-  *)
-    AM_CONDITIONAL(MACOSX, false)
+    tds_macosx=yes
     ;;
 esac
+AM_CONDITIONAL(MACOSX, [test $tds_macosx = yes])
 
 if test $netdb_reentrant = yes; then
 	AC_DEFINE(NETDB_REENTRANT, 1, [Define to 1 if the BSD-style netdb interface is reentrant.])
@@ -121,6 +120,9 @@ AC_ARG_ENABLE(libiconv,
 
 if test "$use_libiconv" = "yes" ; then
 	AM_ICONV
+	if test "$am_cv_func_iconv" != "yes"; then
+		AC_MSG_ERROR([iconv library not found])
+	fi
 else
 	AC_MSG_NOTICE(libiconv disabled)
 	AC_DEFINE_UNQUOTED(ICONV_CONST, const, [Define as const if the declaration of iconv() needs const.])
@@ -183,7 +185,6 @@ case $host in
 	fi
 	LIBS="$LIBS -lcrypt32"
 	krb5_libs=
-	AM_CONDITIONAL(MINGW32, true)
 	;;
 *-*-hpux*)
 	# these lines are needed to fix a problem for HP-UX
@@ -201,15 +202,15 @@ case $host in
 	# check for _xpg_ functions
 	AC_CHECK_FUNCS([_xpg_accept _xpg_getpeername _xpg_getsockname _xpg_getsockopt _xpg_recvfrom \
 	__accept __getpeername __getsockname __getsockopt __recvfrom])
-	AM_CONDITIONAL(MINGW32, false)
 	;;
 *)
 	AC_SEARCH_LIBS(socket, socket)
 	AC_SEARCH_LIBS(gethostbyname, nsl)
-
-	AM_CONDITIONAL(MINGW32, false)
 	;;
 esac
+AM_CONDITIONAL(MINGW32, [test $tds_mingw = yes])
+
+AM_CONDITIONAL(FAST_INSTALL, [test $tds_mingw = yes || test $tds_macosx = yes])
 
 case "$krb5_libs" in
 "" ) ;;
@@ -531,7 +532,8 @@ AC_DEFINE(HAVE_GETADDRINFO, 1, [Define if you have getaddrinfo function]))
 ACX_POP_LIBS
 
 AC_REPLACE_FUNCS([asprintf vasprintf strtok_r readpassphrase \
-strlcpy strlcat basename getopt strsep daemon setenv])
+strlcpy strlcat basename getopt strsep daemon setenv \
+poll socketpair getaddrinfo])
 AC_FUNC_FSEEKO
 TDS_GETTIMEMILLI
 AC_FUNC_ALLOCA
@@ -703,18 +705,28 @@ then
 	fi
 
 	if test "$odbc" = "true"; then
-		saved_LDFLAGS="$LDFLAGS"
+		odbcinst_LDFLAGS=
 		ODBCINST_LDFLAGS=
-		LDFLAGS="$LDFLAGS $ODBC_LDFLAGS"
+		for flag in $ODBC_LDFLAGS; do
+			case "$flag" in
+			-l*)
+				;;
+			*)
+				odbcinst_LDFLAGS="$odbcinst_LDFLAGS $flag"
+				;;
+			esac
+		done
+		saved_LDFLAGS="$LDFLAGS"
+		LDFLAGS="$LDFLAGS $odbcinst_LDFLAGS"
 		if test $tds_mingw = yes; then
 			ODBCINST_LDFLAGS="-lodbccp32"
 		elif test "$unixodbc" = "true"; then
 			if test -n "$ODBC_CONFIG"; then
 				CPPFLAGS="$CPPFLAGS `$ODBC_CONFIG --cflags`"
 			fi
-			AC_CHECK_LIB(odbcinst, SQLGetPrivateProfileString, [ODBCINST_LDFLAGS="$ODBC_LDFLAGS -lodbcinst"])
+			AC_CHECK_LIB(odbcinst, SQLGetPrivateProfileString, [ODBCINST_LDFLAGS="$odbcinst_LDFLAGS -lodbcinst"])
 		elif test "$iodbc" = "true"; then
-			AC_CHECK_LIB(iodbcinst, SQLGetPrivateProfileString, [ODBCINST_LDFLAGS="$ODBC_LDFLAGS -liodbcinst"])
+			AC_CHECK_LIB(iodbcinst, SQLGetPrivateProfileString, [ODBCINST_LDFLAGS="$odbcinst_LDFLAGS -liodbcinst"])
 		fi
 		if test "$ODBCINST_LDFLAGS" != ""; then
 			AC_DEFINE_UNQUOTED(HAVE_SQLGETPRIVATEPROFILESTRING, 1, [Define to 1 if you have the SQLGetPrivateProfileString function.])
@@ -730,13 +742,13 @@ then
 	# test for SQLLEN (iODBC do not define but typedef it)
 	save_cppflags="$CPPFLAGS"
 	CPPFLAGS="$CPPFLAGS $ODBC_INC"
-	AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#if defined(_WIN32) || defined(WIN32) || defined(__MINGW32__)
+	AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#if defined(_WIN32) || defined(__MINGW32__)
 #include <windows.h>
 #endif
 #include <sql.h>]], [[SQLLEN len = 123;]])],
 		AC_DEFINE(HAVE_SQLLEN, 1, [Define if sqltypes.h define SQLLEN])
 		# check SQLColAttribute definition
-		AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#if defined(_WIN32) || defined(WIN32) || defined(__MINGW32__)
+		AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#if defined(_WIN32) || defined(__MINGW32__)
 #include <windows.h>
 #endif
 #include <sql.h>
@@ -750,7 +762,7 @@ SQLRETURN  SQL_API SQLColAttribute (SQLHSTMT StatementHandle,
 		AC_DEFINE(TDS_SQLCOLATTRIBUTE_SQLLEN, 1, [Define to 1 if last argument of SQLColAttribute it's SQLLEN *]))
 
 		# check is SQLParamOptions accept SQLULEN
-		AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#if defined(_WIN32) || defined(WIN32) || defined(__MINGW32__)
+		AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#if defined(_WIN32) || defined(__MINGW32__)
 #include <windows.h>
 #endif
 #include <sql.h>
@@ -763,14 +775,14 @@ SQLRETURN SQL_API SQLParamOptions(SQLHSTMT       hstmt,
 		AC_DEFINE(TDS_SQLPARAMOPTIONS_SQLLEN, 1, [Define to 1 if SQLParamOptions accept SQLULEN as arguments]))
 	)
 
-	AC_CHECK_TYPES([SQLSETPOSIROW, SQLROWSETSIZE, SQLROWOFFSET],,, [#if defined(_WIN32) || defined(WIN32) || defined(__MINGW32__)
+	AC_CHECK_TYPES([SQLSETPOSIROW, SQLROWSETSIZE, SQLROWOFFSET],,, [#if defined(_WIN32) || defined(__MINGW32__)
 #include <windows.h>
 #endif
 #include <sql.h>
 #include <sqlext.h>])
 
 	# test for sizeof(SQLWCHAR)
-	AC_CHECK_SIZEOF(SQLWCHAR,,[#if defined(_WIN32) || defined(WIN32) || defined(__MINGW32__)
+	AC_CHECK_SIZEOF(SQLWCHAR,,[#if defined(_WIN32) || defined(__MINGW32__)
 #include <windows.h>
 #endif
 #include <sql.h>])
@@ -823,7 +835,8 @@ if test "$with_gnutls" = "yes"; then
 		NETWORK_LIBS="$NETWORK_LIBS `libgnutls-config --libs`"]
 	)
 	ACX_PUSH_LIBS("$NETWORK_LIBS")
-	AC_CHECK_FUNCS([gnutls_certificate_set_verify_function gnutls_record_disable_padding gnutls_rnd gnutls_alpn_set_protocols])
+	AC_CHECK_FUNCS([gnutls_certificate_set_verify_function gnutls_record_disable_padding \
+		        gnutls_rnd gnutls_alpn_set_protocols gnutls_set_default_priority_append])
 	ACX_POP_LIBS
 	if test "$gnutls_backend" = "unknown"; then
 		gnutls_backend=gcrypt
@@ -960,6 +973,7 @@ if test "$enable_odbc_wide" != "no" ; then
 else
 	AM_CONDITIONAL(ODBC_WIDE_TESTS, false)
 fi
+AM_CONDITIONAL(ODBC_WIDE, test "$enable_odbc_wide" != "no")
 
 AC_ARG_ENABLE(distcheck_build,
 	AS_HELP_STRING([--enable-distcheck-build], [used internally for testing]))
@@ -968,6 +982,15 @@ if test "$enable_distcheck_build" = "yes" ; then
 else
 	AM_CONDITIONAL(DISTCHECK_BUILD, false)
 fi
+
+# ------------------------------------------------------------
+# Check for Windows
+# ------------------------------------------------------------
+
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#if !defined(_WIN32) && !defined(__MINGW32__)
+#error Not Windows
+#endif]], [[return 0]])], [win32=yes], [win32=no])
+AM_CONDITIONAL(WIN32, [test "$win32" = "yes"])
 
 # ------------------------------------------------------------
 # LTLIBOBJS hack (for autoconf-2.53)

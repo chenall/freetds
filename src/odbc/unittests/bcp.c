@@ -138,8 +138,10 @@ init(void)
 }
 
 #define VARCHAR_BIND(x) \
-	bcp_bind( odbc_conn, (prefixlen == 0 ? (void*)&x.value : (void*)&x.prefix), prefixlen, \
-		strlen(x.value), NULL, termlen, BCP_TYPE_SQLVARCHAR, col++ )
+	bcp_bind( odbc_conn, \
+		  (prefixlen == 0 ? (void*)&x.value : (void*)&x.prefix), \
+		  prefixlen, (SQLINTEGER) strlen(x.value), NULL, termlen, \
+		  BCP_TYPE_SQLVARCHAR, col++ )
 
 #define INT_BIND(x) \
 	bcp_bind( odbc_conn, (prefixlen == 0 ? (void*)&x.value : (void*)&x.prefix), prefixlen, \
@@ -253,8 +255,7 @@ static void special_select(void);
 
 static const char table_name[] = "all_types_bcp_unittest";
 
-int
-main(void)
+TEST_MAIN()
 {
 	const char *s;
 
@@ -293,7 +294,8 @@ main(void)
 	return 0;
 }
 
-static void normal_inserts(int prefixlen)
+static void
+normal_inserts(int prefixlen)
 {
 	int i;
 	int rows_sent;
@@ -329,7 +331,8 @@ static void normal_inserts(int prefixlen)
 	printf("done\n");
 }
 
-static void special_inserts(void)
+static void
+special_inserts(void)
 {
 	int rows_sent;
 	SQL_TIMESTAMP_STRUCT timestamp;
@@ -389,7 +392,8 @@ static void special_inserts(void)
 	printf("done\n");
 }
 
-static void normal_select(void)
+static void
+normal_select(void)
 {
 	int ok = 1, i;
 
@@ -421,7 +425,8 @@ static void normal_select(void)
 	CHKCloseCursor("SI");
 }
 
-static void special_select(void)
+static void
+special_select(void)
 {
 	int ok = 1, i;
 

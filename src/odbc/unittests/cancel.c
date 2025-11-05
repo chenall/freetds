@@ -70,9 +70,10 @@ sigalrm_handler(int s TDS_UNUSED)
 
 static HANDLE alarm_cond = NULL;
 
-static DWORD WINAPI alarm_thread_proc(LPVOID arg)
+static DWORD WINAPI
+alarm_thread_proc(LPVOID arg)
 {
-	unsigned int timeout = (uintptr_t) arg;
+	unsigned int timeout = (unsigned int) (uintptr_t) arg;
 	switch (WaitForSingleObject(alarm_cond, timeout * 1000)) {
 	case WAIT_OBJECT_0:
 		return 0;
@@ -83,7 +84,8 @@ static DWORD WINAPI alarm_thread_proc(LPVOID arg)
 
 #undef alarm
 #define alarm tds_alarm
-static void alarm(unsigned int timeout)
+static void
+alarm(unsigned int timeout)
 {
 	static HANDLE thread = NULL;
 
@@ -111,7 +113,7 @@ static void alarm(unsigned int timeout)
 }
 #endif
 
-volatile bool exit_thread;
+static volatile bool exit_thread;
 
 static TDS_THREAD_PROC_DECLARE(wait_thread_proc, arg TDS_UNUSED)
 {
@@ -283,8 +285,7 @@ TestOtherStatement(bool some_activity)
 	SWAP_STMT(stmt);
 }
 
-int
-main(void)
+TEST_MAIN()
 {
 	if (tds_mutex_init(&mtx))
 		return 1;
@@ -297,11 +298,11 @@ main(void)
 	 * is better to do it before connect cause unixODBC cache INIs
 	 * the name must be odbcinst.ini cause unixODBC accept only this name
 	 */
-	if (odbc_driver[0]) {
+	if (common_pwd.driver[0]) {
 		FILE *f = fopen("odbcinst.ini", "w");
 
 		if (f) {
-			fprintf(f, "[FreeTDS]\nDriver = %s\nThreading = 0\n", odbc_driver);
+			fprintf(f, "[FreeTDS]\nDriver = %s\nThreading = 0\n", common_pwd.driver);
 			fclose(f);
 			/* force iODBC */
 			setenv("ODBCINSTINI", "./odbcinst.ini", 1);
@@ -311,7 +312,7 @@ main(void)
 		}
 	}
 
-	odbc_use_version3 = 1;
+	odbc_use_version3 = true;
 	odbc_connect();
 
 	odbc_command("IF OBJECT_ID('tab1') IS NOT NULL DROP TABLE tab1");
@@ -351,8 +352,7 @@ main(void)
 }
 
 #else
-int
-main(void)
+TEST_MAIN()
 {
 	printf("Not possible for this platform.\n");
 	return 0;

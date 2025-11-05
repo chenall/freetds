@@ -353,6 +353,16 @@ tds_read_conf_file(TDSLOGIN * login, const char *server)
 		}
 	}
 
+#if !defined(_WIN32) && !defined(DOS32X)
+	if (!found) {
+		path = tds_get_home_file(TDS_DIR(".config/freetds.conf"));
+		if (path) {
+			found = tds_try_conf_file(path, "(.config/freetds.conf)", server, login);
+			free(path);
+		}
+	}
+#endif
+
 	if (!found) {
 		path = tds_get_home_file(TDS_DIR(".freetds.conf"));
 		if (path) {
@@ -621,13 +631,13 @@ tds_parse_conf_section(const char *option, const char *value, void *param)
 		char *end;
 		long flags;
 		flags = strtol(value, &end, 0);
-		if (*value != '\0' && *end == '\0' && flags != LONG_MIN && flags != LONG_MAX)
-			login->debug_flags = flags;
+		if (*value != '\0' && *end == '\0' && flags > INT_MIN && flags < INT_MAX)
+		    login->debug_flags = (int) flags;
 	} else if (!strcmp(option, TDS_STR_TIMEOUT) || !strcmp(option, TDS_STR_QUERY_TIMEOUT)) {
-		if (atoi(value))
+		if (atoi(value) > 0)
 			login->query_timeout = atoi(value);
 	} else if (!strcmp(option, TDS_STR_CONNTIMEOUT)) {
-		if (atoi(value))
+		if (atoi(value) > 0)
 			login->connect_timeout = atoi(value);
 	} else if (!strcmp(option, TDS_STR_HOST)) {
 		char tmp[128];
@@ -644,13 +654,13 @@ tds_parse_conf_section(const char *option, const char *value, void *param)
 			tdsdump_log(TDS_DBG_INFO1, "IP addr is %s.\n", tds_addrinfo2str(addrs, tmp, sizeof(tmp)));
 
 	} else if (!strcmp(option, TDS_STR_PORT)) {
-		if (atoi(value))
+		if (atoi(value) > 0)
 			login->port = atoi(value);
 	} else if (!strcmp(option, TDS_STR_EMUL_LE)) {
 		/* obsolete, ignore */
 		tds_config_boolean(option, value, login);
 	} else if (!strcmp(option, TDS_STR_TEXTSZ)) {
-		if (atoi(value))
+		if (atoi(value) > 0)
 			login->text_size = atoi(value);
 	} else if (!strcmp(option, TDS_STR_CHARSET)) {
 		s = tds_dstr_copy(&login->server_charset, value);
@@ -700,6 +710,9 @@ tds_parse_conf_section(const char *option, const char *value, void *param)
 	} else if (!strcmp(option, TDS_STR_ENABLE_TLS_V1)) {
 		parse_boolean(option, value, login->enable_tls_v1);
 		login->enable_tls_v1_specified = 1;
+	} else if (!strcmp(option, TDS_STR_ENABLE_TLS_V1_1)) {
+		parse_boolean(option, value, login->enable_tls_v1_1);
+		login->enable_tls_v1_1_specified = 1;
 	} else {
 		tdsdump_log(TDS_DBG_INFO1, "UNRECOGNIZED option '%s' ... ignoring.\n", option);
 	}
@@ -819,6 +832,11 @@ tds_config_login(TDSLOGIN * connection, TDSLOGIN * login)
 	if (login->enable_tls_v1_specified) {
 		connection->enable_tls_v1_specified = login->enable_tls_v1_specified;
 		connection->enable_tls_v1 = login->enable_tls_v1;
+	}
+
+	if (login->enable_tls_v1_1_specified) {
+		connection->enable_tls_v1_1_specified = login->enable_tls_v1_1_specified;
+		connection->enable_tls_v1_1 = login->enable_tls_v1_1;
 	}
 
 	if (res)
@@ -978,17 +996,21 @@ tds_config_verstr(const char *tdsver, TDSLOGIN * login)
 TDSRET
 tds_set_interfaces_file_loc(const char *interf)
 {
+	tds_dir_char *copy = NULL;
+
+	/* If filename passed, copy filename */
+	if (interf != NULL && interf[0] != '\0') {
+		copy = tds_dir_from_cstr(interf);
+		if (copy == NULL)
+			return -TDSEMEM;
+	}
+
 	/* Free it if already set */
-	if (interf_file != NULL)
-		TDS_ZERO_FREE(interf_file);
-	/* If no filename passed, leave it NULL */
-	if ((interf == NULL) || (interf[0] == '\0')) {
-		return TDS_SUCCESS;
-	}
-	/* Set to new value */
-	if ((interf_file = tds_dir_from_cstr(interf)) == NULL) {
-		return TDS_FAIL;
-	}
+	free(interf_file);
+
+	/* Set */
+	interf_file = copy;
+
 	return TDS_SUCCESS;
 }
 
@@ -1455,16 +1477,20 @@ tds_get_compiletime_settings(void)
 TDSRET
 tds8_adjust_login(TDSLOGIN *login)
 {
-	if (!IS_TDS80_PLUS(login) && login->encryption_level != TDS_ENCRYPTION_STRICT)
-		return TDS_SUCCESS;
+	/* TDS 8.0 requires TDS_ENCRYPTION_STRICT (entire-connection encryption) */
+	if (IS_TDS80_PLUS(login))
+		login->encryption_level = TDS_ENCRYPTION_STRICT;
 
-	login->tds_version = 0x800;
-	login->encryption_level = TDS_ENCRYPTION_STRICT;
+	if (login->encryption_level == TDS_ENCRYPTION_STRICT) {
+		/* TDS 5.0 (Sybase/SAP ASE) it is optional; but TDS 7.x does not allow it.
+		 * So, try 8.0 unless they specifically requested 5.0 */
+		if (!IS_TDS50(login) && !IS_TDS80_PLUS(login))
+			login->tds_version = 0x800;
 
-	/* we must have certificates */
-	if (tds_dstr_isempty(&login->cafile)) {
-		if (!tds_dstr_copy(&login->cafile, "system"))
-			return -TDSEMEM;
+		/* Validate server certificate signature to reduce risk of MITM attacks */
+		if (tds_dstr_isempty(&login->cafile))
+			if (!tds_dstr_copy(&login->cafile, "system"))
+				return -TDSEMEM;
 	}
 
 	return TDS_SUCCESS;

@@ -5,12 +5,11 @@
 
 #include "common.h"
 
-int failed = 0;
+#include <freetds/bool.h>
 
-
-int
-main(int argc, char **argv)
+TEST_MAIN()
 {
+	bool failed = false;
 	const int rows_to_add = 50;
 	LOGINREC *login;
 	DBPROCESS *dbproc;
@@ -58,7 +57,7 @@ main(int argc, char **argv)
 			/* nop */
 		}
 		if (DBCOUNT(dbproc) != 1) {
-			failed = 1;
+			failed = true;
 			printf("Was expecting a rows affect to be 1.");
 			exit(1);
 		}
@@ -70,20 +69,20 @@ main(int argc, char **argv)
 
 	printf("Checking for an empty result set.\n");
 	if (dbresults(dbproc) != SUCCEED) {
-		failed = 1;
+		failed = true;
 		printf("Was expecting a result set.\n");
 		exit(1);
 	}
 
 	if(DBROWS(dbproc) != FAIL) {
-		failed = 1;
+		failed = true;
 		printf("Was expecting no rows to be available.\n");
 		exit(1);
 	}
 
 	printf("Checking for a result set with content.\n");
 	if (dbresults(dbproc) != SUCCEED) {
-		failed = 1;
+		failed = true;
 		printf("Was expecting a result set.");
 		exit(1);
 	}
@@ -92,12 +91,12 @@ main(int argc, char **argv)
 		printf("col %d is %s\n", i, dbcolname(dbproc, i));
 
 	if (SUCCEED != dbbind(dbproc, 1, INTBIND, 0, (BYTE *) & testint)) {
-		failed = 1;
+		failed = true;
 		fprintf(stderr, "Had problem with bind\n");
 		abort();
 	}
 	if (SUCCEED != dbbind(dbproc, 2, STRINGBIND, 0, (BYTE *) teststr)) {
-		failed = 1;
+		failed = true;
 		fprintf(stderr, "Had problem with bind\n");
 		abort();
 	}
@@ -108,17 +107,17 @@ main(int argc, char **argv)
 		sprintf(expected, "row %03d", i);
 
 		if (REG_ROW != dbnextrow(dbproc)) {
-			failed = 1;
+			failed = true;
 			fprintf(stderr, "Failed.  Expected a row\n");
 			exit(1);
 		}
 		if (testint != i) {
-			failed = 1;
+			failed = true;
 			fprintf(stderr, "Failed.  Expected i to be %d, was %d\n", i, (int) testint);
 			abort();
 		}
 		if (0 != strncmp(teststr, expected, strlen(expected))) {
-			failed = 1;
+			failed = true;
 			printf("Failed.  Expected s to be |%s|, was |%s|\n", expected, teststr);
 			abort();
 		}
@@ -126,12 +125,12 @@ main(int argc, char **argv)
 	}
 
 	if (dbnextrow(dbproc) != NO_MORE_ROWS) {
-		failed = 1;
+		failed = true;
 		fprintf(stderr, "Was expecting no more rows\n");
 		exit(1);
 	}
 	if (DBCOUNT(dbproc) != rows_to_add) {
-		failed = 1;
+		failed = true;
 		printf("Was expecting a rows affect to be %d was %d.\n", rows_to_add, DBCOUNT(dbproc));
 		exit(1);
 	}
@@ -142,7 +141,7 @@ main(int argc, char **argv)
 		/* nop */
 	}
 	if (DBCOUNT(dbproc) != rows_to_add) {
-		failed = 1;
+		failed = true;
 		printf("Was expecting a rows affect to be %d was %d.\n", rows_to_add, DBCOUNT(dbproc));
 		exit(1);
 	} else {

@@ -19,6 +19,7 @@
 	TEST(ct_command) \
 	TEST(ct_cursor) \
 	TEST(ct_con_props) \
+	TEST(ct_cmd_props) \
 	TEST(cs_convert)
 
 /* forward declare all tests */
@@ -38,8 +39,7 @@ static CS_CONTEXT *ctx;
 static CS_CONNECTION *conn;
 static CS_COMMAND *cmd;
 
-int
-main(void)
+TEST_MAIN()
 {
 	int verbose = 1;
 
@@ -428,6 +428,86 @@ test_ct_cursor(void)
 	/* wrong name and query length */
 	check_fail(ct_cursor, (cmd, CS_CURSOR_DECLARE, "test", -11, "query", -3, CS_UNUSED));
 	check_last_message(CTMSG_CLIENT2, 0x01010105, " -11 given for parameter namelen");
+
+	/* name present without cursor, priority to name */
+	check_fail(ct_cursor, (cmd, CS_CURSOR_ROWS, "name", CS_NULLTERM, NULL, CS_UNUSED, (CS_INT) 1));
+	check_last_message(CTMSG_CLIENT2, 0x01010108, "The name parameter must be NULL");
+
+	/* no cursor */
+	check_fail(ct_cursor, (cmd, CS_CURSOR_ROWS, NULL, CS_UNUSED, NULL, CS_UNUSED, (CS_INT) 1));
+	check_last_message(CTMSG_CLIENT2, 0x01010112, "A cursor must be declared before this command type can be initialized");
+
+	check_fail(ct_cursor, (cmd, CS_CURSOR_CLOSE, NULL, CS_UNUSED, NULL, CS_UNUSED, CS_DEALLOC));
+	check_last_message(CTMSG_CLIENT2, 0x010101ab, "A cursor must be opened before this command type can be initialized.");
+
+	check_fail(ct_cursor, (cmd, CS_CURSOR_DEALLOC, NULL, CS_UNUSED, NULL, CS_UNUSED, CS_UNUSED));
+	check_last_message(CTMSG_CLIENT2, 0x01010112, "A cursor must be declared before this command type can be initialized");
+
+	/* declare the cursor to allow following commands */
+	check_call(ct_cursor, (cmd, CS_CURSOR_DECLARE, "test", CS_NULLTERM, "query", CS_NULLTERM, CS_UNUSED));
+
+	/* name present */
+	check_fail(ct_cursor, (cmd, CS_CURSOR_ROWS, "name", CS_NULLTERM, "text", CS_NULLTERM, (CS_INT) 1));
+	check_last_message(CTMSG_CLIENT2, 0x01010108, "The name parameter must be NULL");
+
+	/* invalid name length */
+	check_fail(ct_cursor, (cmd, CS_CURSOR_ROWS, NULL, CS_NULLTERM, "text", CS_NULLTERM, (CS_INT) 1));
+	check_last_message(CTMSG_CLIENT2, 0x01010109, "The namelen parameter must be set to CS_UNUSED");
+
+	check_fail(ct_cursor, (cmd, CS_CURSOR_ROWS, NULL, CS_UNUSED, "text", CS_NULLTERM, (CS_INT) 1));
+	check_last_message(CTMSG_CLIENT2, 0x01010108, "The text parameter must be NULL");
+
+	check_fail(ct_cursor, (cmd, CS_CURSOR_ROWS, NULL, CS_UNUSED, NULL, CS_NULLTERM, (CS_INT) 1));
+	check_last_message(CTMSG_CLIENT2, 0x01010109, "The tlen parameter must be set to CS_UNUSED");
+
+	/* name present */
+	check_fail(ct_cursor, (cmd, CS_CURSOR_OPEN, "name", CS_NULLTERM, "text", CS_NULLTERM, CS_UNUSED));
+	check_last_message(CTMSG_CLIENT2, 0x01010108, "The name parameter must be NULL");
+
+	/* name length present */
+	check_fail(ct_cursor, (cmd, CS_CURSOR_OPEN, NULL, CS_NULLTERM, "text", CS_NULLTERM, CS_UNUSED));
+	check_last_message(CTMSG_CLIENT2, 0x01010109, "The namelen parameter must be set to CS_UNUSED");
+
+	/* text present */
+	check_fail(ct_cursor, (cmd, CS_CURSOR_OPEN, NULL, CS_UNUSED, "text", CS_NULLTERM, CS_UNUSED));
+	check_last_message(CTMSG_CLIENT2, 0x01010108, "The text parameter must be NULL");
+
+	/* text length present */
+	check_fail(ct_cursor, (cmd, CS_CURSOR_OPEN, NULL, CS_UNUSED, NULL, CS_NULLTERM, CS_UNUSED));
+	check_last_message(CTMSG_CLIENT2, 0x01010109, "The tlen parameter must be set to CS_UNUSED");
+
+	/* name, name length, text, text length all present */
+	check_fail(ct_cursor, (cmd, CS_CURSOR_CLOSE, "name", CS_NULLTERM, "text", CS_NULLTERM, CS_DEALLOC));
+	check_last_message(CTMSG_CLIENT2, 0x01010108, "The name parameter must be NULL");
+
+	/* name length present */
+	check_fail(ct_cursor, (cmd, CS_CURSOR_CLOSE, NULL, CS_NULLTERM, "text", CS_NULLTERM, CS_DEALLOC));
+	check_last_message(CTMSG_CLIENT2, 0x01010109, "The namelen parameter must be set to CS_UNUSED");
+
+	/* text present */
+	check_fail(ct_cursor, (cmd, CS_CURSOR_CLOSE, NULL, CS_UNUSED, "text", CS_NULLTERM, CS_DEALLOC));
+	check_last_message(CTMSG_CLIENT2, 0x01010108, "The text parameter must be NULL");
+
+	/* text length present */
+	check_fail(ct_cursor, (cmd, CS_CURSOR_CLOSE, NULL, CS_UNUSED, NULL, CS_NULLTERM, CS_DEALLOC));
+	check_last_message(CTMSG_CLIENT2, 0x01010109, "The tlen parameter must be set to CS_UNUSED");
+
+	/* name, name length, text, text length all present */
+	check_fail(ct_cursor, (cmd, CS_CURSOR_DEALLOC, "name", CS_NULLTERM, "text", CS_NULLTERM, CS_UNUSED));
+	check_last_message(CTMSG_CLIENT2, 0x01010108, "The name parameter must be NULL");
+
+	/* name length present */
+	check_fail(ct_cursor, (cmd, CS_CURSOR_DEALLOC, NULL, CS_NULLTERM, "text", CS_NULLTERM, CS_UNUSED));
+	check_last_message(CTMSG_CLIENT2, 0x01010109, "The namelen parameter must be set to CS_UNUSED");
+
+	/* text present */
+	check_fail(ct_cursor, (cmd, CS_CURSOR_DEALLOC, NULL, CS_UNUSED, "text", CS_NULLTERM, CS_UNUSED));
+	check_last_message(CTMSG_CLIENT2, 0x01010108, "The text parameter must be NULL");
+
+	/* text length present */
+	check_fail(ct_cursor, (cmd, CS_CURSOR_DEALLOC, NULL, CS_UNUSED, NULL, CS_NULLTERM, CS_UNUSED));
+	check_last_message(CTMSG_CLIENT2, 0x01010109, "The tlen parameter must be set to CS_UNUSED");
+
 }
 
 static void
@@ -449,6 +529,16 @@ test_ct_con_props(void)
 
 	check_fail(ct_con_props, (NULL, CS_SET, CS_APPNAME, "app", 3, NULL));
 	check_last_message(CTMSG_NONE, 0, NULL);
+}
+
+static void
+test_ct_cmd_props(void)
+{
+	CS_INT props_value;
+
+	/* wrong buffer length */
+	check_fail(ct_cmd_props, (cmd, CS_GET, CS_CUR_STATUS, &props_value, sizeof(CS_INT), NULL));
+	check_last_message(CTMSG_CLIENT2, 0x01010109, "The buflen parameter must be set to CS_UNUSED");
 }
 
 static void

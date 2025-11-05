@@ -16,12 +16,10 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
-#undef NDEBUG
 #include "common.h"
 #include <freetds/iconv.h>
 #include <freetds/utils/md5.h>
 
-#undef NDEBUG
 #include <ctype.h>
 #include <assert.h>
 
@@ -283,15 +281,14 @@ extract_collations(void)
 	fclose(f);
 }
 
-int
-main(void)
+TEST_MAIN()
 {
 	TDSLOGIN *login;
 	int ret;
 	int verbose = 0;
 
 	/* use UTF-8 as our coding */
-	strcpy(CHARSET, "UTF-8");
+	strcpy(common_pwd.charset, "UTF-8");
 
 	ret = try_tds_login(&login, &tds, __FILE__, verbose);
 	if (ret != TDS_SUCCESS) {

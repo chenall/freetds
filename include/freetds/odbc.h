@@ -88,10 +88,6 @@ extern "C"
 #  define ODBC_PUBLIC
 #endif
 
-#define ODBC_MAX(a,b) ( (a) > (b) ? (a) : (b) )
-#define ODBC_MIN(a,b) ( (a) < (b) ? (a) : (b) )
-#define ODBC_CLAMP(x,a,b) ( (x) < (a) ? (a) : (x) > (b) ? (b) : (x) )
-
 struct _sql_error
 {
 	const char *msg;
@@ -292,6 +288,7 @@ struct _hdbc
 	TDSSOCKET *tds_socket;
 	DSTR dsn;
 	DSTR oldpwd;
+	DSTR db_filename;
 #ifdef ENABLE_ODBC_WIDE
 	int original_charset_num;
 	TDSICONV *mb_conv;
@@ -415,6 +412,8 @@ struct _hstmt
 	 */
 	unsigned need_reprepare:1;
 	unsigned param_data_called:1;
+	unsigned params_queried:1;
+	unsigned params_set:1;
 	/* end prepared query stuff */
 
 	/** parameters saved */
@@ -501,35 +500,37 @@ bool get_login_info(HWND hwndParent, TDSLOGIN * login);
 #endif
 
 #define ODBC_PARAM_LIST \
-	ODBC_PARAM(Servername) \
-	ODBC_PARAM(Server) \
-	ODBC_PARAM(DSN) \
-	ODBC_PARAM(UID) \
-	ODBC_PARAM(PWD) \
 	ODBC_PARAM(Address) \
-	ODBC_PARAM(Port) \
-	ODBC_PARAM(TDS_Version) \
-	ODBC_PARAM(Language) \
-	ODBC_PARAM(Database) \
-	ODBC_PARAM(TextSize) \
-	ODBC_PARAM(PacketSize) \
+	ODBC_PARAM(APP) \
+	ODBC_PARAM(ApplicationIntent) \
+	ODBC_PARAM(AttachDbFilename) \
 	ODBC_PARAM(ClientCharset) \
+	ODBC_PARAM(ConnectionTimeout) \
+	ODBC_PARAM(Database) \
+	ODBC_PARAM(DebugFlags) \
+	ODBC_PARAM(DSN) \
 	ODBC_PARAM(DumpFile) \
 	ODBC_PARAM(DumpFileAppend) \
-	ODBC_PARAM(DebugFlags) \
-	ODBC_PARAM(Encryption) \
-	ODBC_PARAM(Trusted_Connection) \
-	ODBC_PARAM(APP) \
-	ODBC_PARAM(WSID) \
-	ODBC_PARAM(UseNTLMv2) \
-	ODBC_PARAM(MARS_Connection) \
-	ODBC_PARAM(REALM) \
-	ODBC_PARAM(ServerSPN) \
-	ODBC_PARAM(AttachDbFilename) \
-	ODBC_PARAM(ApplicationIntent) \
-	ODBC_PARAM(Timeout) \
 	ODBC_PARAM(Encrypt) \
-	ODBC_PARAM(HostNameInCertificate)
+	ODBC_PARAM(Encryption) \
+	ODBC_PARAM(HostNameInCertificate) \
+	ODBC_PARAM(Language) \
+	ODBC_PARAM(MARS_Connection) \
+	ODBC_PARAM(PacketSize) \
+	ODBC_PARAM(Port) \
+	ODBC_PARAM(PWD) \
+	ODBC_PARAM(REALM) \
+	ODBC_PARAM(Server) \
+	ODBC_PARAM(ServerCertificate) \
+	ODBC_PARAM(Servername) \
+	ODBC_PARAM(ServerSPN) \
+	ODBC_PARAM(TDS_Version) \
+	ODBC_PARAM(TextSize) \
+	ODBC_PARAM(Timeout) \
+	ODBC_PARAM(Trusted_Connection) \
+	ODBC_PARAM(UID) \
+	ODBC_PARAM(UseNTLMv2) \
+	ODBC_PARAM(WSID)
 
 #define ODBC_PARAM(p) ODBC_PARAM_##p,
 enum {
@@ -585,7 +586,7 @@ typedef struct {
 
 TDS_DESC *desc_alloc(SQLHANDLE parent, int desc_type, SQLSMALLINT alloc_type);
 SQLRETURN desc_free(TDS_DESC * desc);
-SQLRETURN desc_alloc_records(TDS_DESC * desc, unsigned count);
+SQLRETURN desc_alloc_records(TDS_DESC * desc, SQLSMALLINT count);
 SQLRETURN desc_copy(TDS_DESC * dest, TDS_DESC * src);
 SQLRETURN desc_free_records(TDS_DESC * desc);
 TDS_DBC *desc_get_dbc(TDS_DESC *desc);
@@ -641,7 +642,7 @@ typedef union {
 # define _WIDE
 # define ODBC_CHAR SQLCHAR
 #endif
-int odbc_set_stmt_query(struct _hstmt *stmt, const ODBC_CHAR *sql, int sql_len _WIDE);
+SQLRETURN odbc_set_stmt_query(struct _hstmt *stmt, const ODBC_CHAR *sql, ptrdiff_t sql_len _WIDE);
 void odbc_set_return_status(struct _hstmt *stmt, unsigned int n_row);
 void odbc_set_return_params(struct _hstmt *stmt, unsigned int n_row);
 
@@ -651,25 +652,25 @@ int odbc_sql_to_c_type_default(int sql_type);
 TDS_SERVER_TYPE odbc_sql_to_server_type(TDSCONNECTION * conn, int sql_type, int sql_unsigned);
 TDS_SERVER_TYPE odbc_c_to_server_type(int c_type);
 
-unsigned int odbc_get_string_size(int size, const ODBC_CHAR * str _WIDE);
+size_t odbc_get_string_size(ptrdiff_t size, const ODBC_CHAR * str _WIDE);
 void odbc_rdbms_version(TDSSOCKET * tds_socket, char *pversion_string);
-SQLINTEGER odbc_get_param_len(const struct _drecord *drec_axd, const struct _drecord *drec_ixd,
-			      const TDS_DESC* axd, unsigned int n_row);
+SQLLEN odbc_get_param_len(const struct _drecord *drec_axd, const struct _drecord *drec_ixd,
+			  const TDS_DESC* axd, SQLSETPOSIROW n_row);
 
 #ifdef ENABLE_ODBC_WIDE
-DSTR* odbc_dstr_copy_flag(TDS_DBC *dbc, DSTR *s, int size, const ODBC_CHAR * str, int flag);
+DSTR* odbc_dstr_copy_flag(TDS_DBC *dbc, DSTR *s, ptrdiff_t size, const ODBC_CHAR * str, int flag);
 #define odbc_dstr_copy(dbc, s, len, out) \
 	odbc_dstr_copy_flag(dbc, s, len, sizeof((out)->mb) ? (out) : (out), wide)
 #define odbc_dstr_copy_oct(dbc, s, len, out) \
 	odbc_dstr_copy_flag(dbc, s, len, out, wide|0x20)
 #else
-DSTR* odbc_dstr_copy(TDS_DBC *dbc, DSTR *s, int size, const ODBC_CHAR * str);
+DSTR* odbc_dstr_copy(TDS_DBC *dbc, DSTR *s, ptrdiff_t size, const ODBC_CHAR * str);
 #define odbc_dstr_copy_oct odbc_dstr_copy
 #endif
 
 
 SQLRETURN odbc_set_string_flag(TDS_DBC *dbc, SQLPOINTER buffer, SQLINTEGER cbBuffer, void FAR * pcbBuffer,
-			       const char *s, int len, int flag);
+			       const char *s, ptrdiff_t len, int flag);
 #ifdef ENABLE_ODBC_WIDE
 #define odbc_set_string(dbc, buf, buf_len, out_len, s, s_len) \
 	odbc_set_string_flag(dbc, sizeof((buf)->mb) ? (buf) : (buf), buf_len, out_len, s, s_len, \
@@ -709,9 +710,15 @@ const char *odbc_skip_rpc_name(const char *s);
 /*
  * sql2tds.c
  */
+typedef union {
+	TDS_DATETIMEALL dta;
+	TDS_NUMERIC num;
+} ODBC_CONVERT_BUF;
+
 SQLRETURN odbc_sql2tds(TDS_STMT * stmt, const struct _drecord *drec_ixd, const struct _drecord *drec_axd, TDSCOLUMN *curcol,
-		       bool compute_row, const TDS_DESC* axd, unsigned int n_row);
+		       bool compute_row, const TDS_DESC* axd, SQLSETPOSIROW n_row);
 TDS_INT convert_datetime2server(int bindtype, const void *src, TDS_DATETIMEALL * dta);
+TDS_INT convert_numeric2server(struct _sql_errors *errs, const void *src, TDS_NUMERIC *num);
 
 /*
  * bcp.c
@@ -731,7 +738,12 @@ void odbc_bcp_bind(TDS_DBC *dbc, const void * varaddr, int prefixlen, int varlen
  */
 #if SIZEOF_SQLWCHAR != SIZEOF_WCHAR_T
 size_t sqlwcslen(const SQLWCHAR * s);
+#else
+#define sqlwcslen(s) wcslen(s)
+#endif
 
+#ifdef ENABLE_ODBC_WIDE
+#if SIZEOF_SQLWCHAR != SIZEOF_WCHAR_T
 typedef struct sqlwstr_buf {
 	struct sqlwstr_buf *next;
 	wchar_t buf[256];
@@ -742,11 +754,10 @@ void sqlwstr_free(SQLWSTRBUF *bufs);
 #define SQLWSTR(s) sqlwstr(s, &bufs)
 #define SQLWSTR_FREE() sqlwstr_free(bufs)
 #else
-#define sqlwcslen(s) wcslen(s)
-
 #define SQLWSTR_BUFS(n) do {} while(0)
 #define SQLWSTR(s) ((const wchar_t*)(s))
 #define SQLWSTR_FREE() do {} while(0)
+#endif
 #endif
 
 int odbc_get_wide_canonic(TDSCONNECTION *conn);
@@ -754,6 +765,21 @@ int odbc_get_wide_canonic(TDSCONNECTION *conn);
 /* compatibility with old BCP implementation */
 #define BCPHINTS_OLD 6
 #define SQL_COPT_TDSODBC_IMPL_BCP_CONTROL_OLD	(SQL_COPT_TDSODBC_IMPL_BASE+1)
+
+/* iODBC extensions used by our driver */
+#ifndef SQL_ATTR_DRIVER_UNICODE_TYPE
+#define SQL_ATTR_DRIVER_UNICODE_TYPE 1065
+#endif
+
+#ifndef SQL_DM_CP_UTF16
+#define SQL_DM_CP_UTF16 1
+#endif
+#ifndef SQL_DM_CP_UTF8
+#define SQL_DM_CP_UTF8 2
+#endif
+#ifndef SQL_DM_CP_UCS4
+#define SQL_DM_CP_UCS4 3
+#endif
 
 #include <freetds/popvis.h>
 

@@ -5,14 +5,14 @@
 static void
 my_attrs(void)
 {
-	SQLSetConnectAttr(odbc_conn, 1226 /*SQL_COPT_SS_OLDPWD */, (SQLPOINTER) odbc_password, SQL_NTS);
-	strcpy(odbc_password, "testpwd$");
+	SQLSetConnectAttr(odbc_conn, 1226 /*SQL_COPT_SS_OLDPWD */ ,
+			  (SQLPOINTER) common_pwd.password, SQL_NTS);
+	strcpy(common_pwd.password, "testpwd$");
 }
 
-int
-main(void)
+TEST_MAIN()
 {
-	odbc_use_version3 = 1;
+	odbc_use_version3 = true;
 	odbc_set_conn_attr = my_attrs;
 	odbc_connect();
 

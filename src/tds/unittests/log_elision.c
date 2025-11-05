@@ -29,6 +29,7 @@
 #include <unistd.h>
 #endif /* HAVE_UNISTD_H */
 
+#ifdef TDS_HAVE_MUTEX
 enum {
 	LOOP = 100,
 	THREADS = 3,
@@ -67,8 +68,7 @@ static TDS_THREAD_PROC_DECLARE(log_func, idx_ptr)
 	return TDS_THREAD_RESULT(0);
 }
 
-int
-main(void)
+TEST_MAIN()
 {
 	int i, ret;
 	tds_thread threads[THREADS];
@@ -109,7 +109,8 @@ main(void)
 	/* read line by line */
 	while (fgets(line, sizeof(line), f) != NULL) {
 		char thread_letter;
-		int num_line, num, idx;
+		int num, idx;
+		char *start;
 
 		/* ignore some start lines */
 		if (strstr(line, "log_elision.c") == NULL) {
@@ -117,9 +118,12 @@ main(void)
 			continue;
 		}
 
-		ret = sscanf(line, "log_elision.c:%d:Some log from %c number %d\n",
-			     &num_line, &thread_letter, &num);
-		assert(ret == 3);
+		start = strstr(line, ":Some log from");
+		assert(start != NULL);
+
+		ret = sscanf(start, ":Some log from %c number %d\n",
+			     &thread_letter, &num);
+		assert(ret == 2);
 
 		/* detect number of thread */
 		assert(thread_letter >= 'A' && thread_letter < 'A' + THREADS);
@@ -142,3 +146,10 @@ main(void)
 
 	return 0;
 }
+#else	/* !TDS_HAVE_MUTEX */
+TEST_MAIN()
+{
+	printf("Not possible for this platform.\n");
+	return 0; /* TODO 77 ? */
+}
+#endif

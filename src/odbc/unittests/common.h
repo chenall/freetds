@@ -1,12 +1,10 @@
-#undef NDEBUG
+#include <freetds/utils/test_base.h>
 
 #ifdef _WIN32
 #define _CRT_SECURE_NO_WARNINGS 1
 #include <freetds/windows.h>
 #include <direct.h>
 #endif
-
-#include <config.h>
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -48,18 +46,12 @@
 extern HENV odbc_env;
 extern HDBC odbc_conn;
 extern HSTMT odbc_stmt;
-extern int odbc_use_version3;
+extern bool odbc_use_version3;
 extern void (*odbc_set_conn_attr)(void);
 extern const char *odbc_conn_additional_params;
 extern char odbc_err[512];
 extern char odbc_sqlstate[6];
 
-
-extern char odbc_user[512];
-extern char odbc_server[512];
-extern char odbc_password[512];
-extern char odbc_database[512];
-extern char odbc_driver[1024];
 
 int odbc_read_login_info(void);
 void odbc_report_error(const char *msg, int line, const char *file);
@@ -181,6 +173,8 @@ SQLRETURN SQLSetStmtOption_nowarning(SQLHSTMT hstmt, SQLSMALLINT option, SQLULEN
 	CHKR2(SQLGetInfo, (odbc_conn,a,b,c,d), SQL_HANDLE_DBC, odbc_conn, res)
 #define CHKNumParams(a,res) \
 	CHKR2(SQLNumParams, (odbc_stmt,a), SQL_HANDLE_STMT, odbc_stmt, res)
+#define CHKDescribeParam(a,b,c,d,e,res) \
+	CHKR2(SQLDescribeParam, (odbc_stmt,a,b,c,d,e), SQL_HANDLE_STMT, odbc_stmt, res)
 
 int odbc_connect(void);
 int odbc_disconnect(void);
@@ -193,6 +187,11 @@ const char *odbc_db_version(void);
 unsigned int odbc_db_version_int(void);
 bool odbc_driver_is_freetds(void);
 int odbc_tds_version(void);
+#ifdef TDS_NO_DM
+enum { tds_no_dm = 1 };
+#else
+enum { tds_no_dm = 0 };
+#endif
 
 void odbc_mark_sockets_opened(void);
 TDS_SYS_SOCKET odbc_find_last_socket(void);
@@ -201,10 +200,10 @@ TDS_SYS_SOCKET odbc_find_last_socket(void);
  * Converts an ODBC result into a string.
  * There is no check on destination length, use a buffer big enough.
  */
-void odbc_c2string(char *out, SQLSMALLINT out_c_type, const void *in, size_t in_len);
+void odbc_c2string(char *out, SQLSMALLINT out_c_type, const void *in, SQLLEN in_len);
 
-int odbc_to_sqlwchar(SQLWCHAR *dst, const char *src, int n);
-int odbc_from_sqlwchar(char *dst, const SQLWCHAR *src, int n);
+SQLLEN odbc_to_sqlwchar(SQLWCHAR *dst, const char *src, SQLLEN n);
+SQLLEN odbc_from_sqlwchar(char *dst, const SQLWCHAR *src, SQLLEN n);
 
 typedef struct odbc_buf ODBC_BUF;
 extern ODBC_BUF *odbc_buf;
@@ -239,6 +238,7 @@ struct odbc_lookup_int
 int odbc_lookup(const char *name, const struct odbc_lookup_int *table, int def);
 const char *odbc_lookup_value(int value, const struct odbc_lookup_int *table, const char *def);
 extern struct odbc_lookup_int odbc_sql_c_types[];
+extern struct odbc_lookup_int odbc_sql_types[];
 
 void odbc_swap_stmts(SQLHSTMT *a, SQLHSTMT *b);
 #define SWAP_STMT(stmt) odbc_swap_stmts(&odbc_stmt, &stmt)

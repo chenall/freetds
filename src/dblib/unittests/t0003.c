@@ -5,12 +5,11 @@
 
 #include "common.h"
 
-int failed = 0;
+#include <freetds/bool.h>
 
-
-int
-main(int argc, char **argv)
+TEST_MAIN()
 {
+	bool failed = false;
 	RETCODE rc;
 	const int rows_to_add = 50;
 	LOGINREC *login;
@@ -73,7 +72,7 @@ main(int argc, char **argv)
 	dbsqlexec(dbproc);
 
 	if (dbresults(dbproc) != SUCCEED) {
-		failed = 1;
+		failed = true;
 		printf("Was expecting a result set.");
 		exit(1);
 	}
@@ -94,17 +93,17 @@ main(int argc, char **argv)
 		}
 
 		if (REG_ROW != dbnextrow(dbproc)) {
-			failed = 1;
+			failed = true;
 			fprintf(stderr, "Failed.  Expected a row\n");
 			exit(1);
 		}
 		if (testint != i) {
-			failed = 1;
+			failed = true;
 			fprintf(stderr, "Failed.  Expected i to be %d, was %d\n", i, (int) testint);
 			abort();
 		}
 		if (0 != strncmp(teststr, expected, strlen(expected))) {
-			failed = 1;
+			failed = true;
 			printf("Failed.  Expected s to be |%s|, was |%s|\n", expected, teststr);
 			abort();
 		}
@@ -114,7 +113,7 @@ main(int argc, char **argv)
 	dbclrbuf(dbproc, 1);
 	rc = dbnextrow(dbproc);
 	if (rc != NO_MORE_ROWS) {
-		failed = 1;
+		failed = true;
 		fprintf(stderr, "Was expecting no more rows.  (rc=%d)\n", rc);
 		exit(1);
 	}

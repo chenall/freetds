@@ -82,7 +82,7 @@ get_utf8(const unsigned char *p, size_t len, ICONV_CHAR *out)
 		switch (decode_utf8(&state, &uc, *p++)) {
 		case UTF8_ACCEPT:
 			*out = uc;
-			return l;
+			return (int) l;
 		case UTF8_REJECT:
 			return -EILSEQ;
 		}
@@ -130,7 +130,7 @@ put_utf8(unsigned char *buf, size_t buf_len, ICONV_CHAR c)
 		c >>= 6;
 	} while (--buf_len);
 	*--buf = (0xff00u >> o_len) | c;
-	return o_len;
+	return (int) o_len;
 }
 
 static int
@@ -248,7 +248,7 @@ put_utf16be(unsigned char *buf, size_t buf_len, ICONV_CHAR c)
 }
 
 static int
-get_iso1(const unsigned char *p, size_t len, ICONV_CHAR *out)
+get_iso1(const unsigned char *p, size_t len TDS_UNUSED, ICONV_CHAR *out)
 {
 	*out = p[0];
 	return 1;
@@ -266,7 +266,7 @@ put_iso1(unsigned char *buf, size_t buf_len, ICONV_CHAR c)
 }
 
 static int
-get_ascii(const unsigned char *p, size_t len, ICONV_CHAR *out)
+get_ascii(const unsigned char *p, size_t len TDS_UNUSED, ICONV_CHAR *out)
 {
 	if (p[0] >= 0x80)
 		return -EILSEQ;
@@ -286,7 +286,7 @@ put_ascii(unsigned char *buf, size_t buf_len, ICONV_CHAR c)
 }
 
 static int
-get_cp1252(const unsigned char *p, size_t len, ICONV_CHAR *out)
+get_cp1252(const unsigned char *p, size_t len TDS_UNUSED, ICONV_CHAR *out)
 {
 	if (*p >= 0x80 && *p < 0xa0)
 		*out = cp1252_0080_00a0[*p - 0x80];
@@ -315,13 +315,13 @@ put_cp1252(unsigned char *buf, size_t buf_len, ICONV_CHAR c)
 }
 
 static int
-get_err(const unsigned char *p, size_t len, ICONV_CHAR *out)
+get_err(const unsigned char *p TDS_UNUSED, size_t len TDS_UNUSED, ICONV_CHAR *out TDS_UNUSED)
 {
 	return -EILSEQ;
 }
 
 static int
-put_err(unsigned char *buf, size_t buf_len, ICONV_CHAR c)
+put_err(unsigned char *buf TDS_UNUSED, size_t buf_len TDS_UNUSED, ICONV_CHAR c TDS_UNUSED)
 {
 	return -EILSEQ;
 }
@@ -397,7 +397,7 @@ tds_sys_iconv_open (const char* tocode, const char* fromcode)
 } 
 
 int 
-tds_sys_iconv_close (iconv_t cd)
+tds_sys_iconv_close (iconv_t cd TDS_UNUSED)
 {
 	return 0;
 }
@@ -432,7 +432,7 @@ tds_sys_iconv (iconv_t cd, const char* * inbuf, size_t *inbytesleft, char* * out
 	ob = (unsigned char*) *outbuf;
 
 	if (CD == Like_to_Like) {
-		size_t copybytes = (il < ol)? il : ol;
+		size_t copybytes = TDS_MIN(il, ol);
 
 		memcpy(ob, ib, copybytes);
 		ob += copybytes;

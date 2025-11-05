@@ -53,16 +53,16 @@ static char expected_type[20] = "SYSTEM TABLE";
 static void
 DoTest(const char *type, int row_returned, int line)
 {
-	int table_len = SQL_NULL_DATA;
+	SQLSMALLINT table_len = SQL_NULL_DATA;
 	char table_buf[80];
 	int found = 0;
 
-#define LEN(x) (x) ? strlen(x) : SQL_NULL_DATA
+#define LEN(x) (x) ? (SQLSMALLINT) strlen(x) : SQL_NULL_DATA
 
 	if (table) {
 		strcpy(table_buf, table);
 		strcat(table_buf, "garbage");
-		table_len = strlen(table);
+		table_len = LEN(table);
 	}
 
 	printf("Test type '%s' %s row at line %d\n", type ? type : "", row_returned ? "with" : "without", line);
@@ -124,13 +124,12 @@ DoTest(const char *type, int row_returned, int line)
 
 #define DoTest(a,b) DoTest(a,b,__LINE__)
 
-int
-main(void)
+TEST_MAIN()
 {
 	char type[32];
 	int mssql2005 = 0;
 
-	odbc_use_version3 = 0;
+	odbc_use_version3 = false;
 	odbc_connect();
 
 	if (odbc_db_is_microsoft() && odbc_db_version_int() >= 0x09000000u) {
@@ -153,7 +152,7 @@ main(void)
 	odbc_disconnect();
 
 
-	odbc_use_version3 = 1;
+	odbc_use_version3 = true;
 	odbc_connect();
 
 	if (mssql2005)

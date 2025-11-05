@@ -5,15 +5,14 @@
 	Test for a bug executing after a not successfully execute
 */
 
-int
-main(void)
+TEST_MAIN()
 {
 	SQLSMALLINT num_params;
 	SQLLEN sql_nts = SQL_NTS;
 	char string[20];
 	SQLINTEGER id;
 
-	odbc_use_version3 = 1;
+	odbc_use_version3 = true;
 	odbc_connect();
 
 	odbc_command("create table #tester (id int not null primary key, name varchar(20) not null)");

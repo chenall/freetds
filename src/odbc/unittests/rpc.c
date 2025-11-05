@@ -139,7 +139,7 @@ Test(const char *name)
 		printf("executing SQLFetch...\n");
 		printf("\t%-30s\n\t%s\n", C(name), dashes);
 		for (nrows=0; CHKFetch("SNo") == SQL_SUCCESS; nrows++) {
-			const SQLINTEGER icol = 1;
+			const SQLUSMALLINT icol = 1;
 			char buf[60];
 			SQLLEN len;
 			CHKGetData( icol
@@ -202,8 +202,7 @@ Test(const char *name)
 	}
 }
 
-int
-main(void)
+TEST_MAIN()
 {
 	const char proc_name[] = "freetds_odbc_rpc_test";
 	char drop_proc[256] = "DROP PROCEDURE ";

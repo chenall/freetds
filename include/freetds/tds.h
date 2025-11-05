@@ -138,7 +138,7 @@ typedef tds_sysdep_real64_type TDS_FLOAT;	/* 64-bit real     */
 #define TDS_INVALID_TYPE ((TDS_SERVER_TYPE) 0)
 
 /**
- * this structure is not directed connected to a TDS protocol but
+ * This structure is not directly connected to TDS protocol but
  * keeps any DATE/TIME information.
  */
 typedef struct
@@ -174,7 +174,7 @@ typedef struct tdsdaterec
  * tell us the number of bytes required to store the specified
  * precision.
  */
-extern const int tds_numeric_bytes_per_prec[];
+extern const uint8_t tds_numeric_bytes_per_prec[];
 
 typedef int TDSRET;
 #define TDS_NO_MORE_RESULTS  ((TDSRET)1)
@@ -469,6 +469,8 @@ is_tds_type_valid(int type)
 #define TLS_STR_OPENSSL_CIPHERS "openssl ciphers"
 /* enable old TLS v1, required for instance if you are using a really old Windows XP */
 #define TDS_STR_ENABLE_TLS_V1 "enable tls v1"
+/* enable old TLS v1.1 */
+#define TDS_STR_ENABLE_TLS_V1_1 "enable tls v1.1"
 
 
 /* TODO do a better check for alignment than this */
@@ -550,6 +552,8 @@ typedef struct tds_login
 	unsigned int readonly_intent:1;
 	unsigned int enable_tls_v1:1;
 	unsigned int enable_tls_v1_specified:1;
+	unsigned int enable_tls_v1_1:1;
+	unsigned int enable_tls_v1_1_specified:1;
 	unsigned int server_is_valid:1;
 } TDSLOGIN;
 
@@ -938,7 +942,8 @@ typedef struct tds_cursor
 	TDS_CURSOR_STATUS status;
 	TDS_USMALLINT srv_status;
 	TDSRESULTINFO *res_info;	/** row fetched from this cursor */
-	TDS_INT type, concurrency;
+	TDS_INT type;
+	TDS_INT concurrency;
 } TDSCURSOR;
 
 /**
@@ -975,7 +980,7 @@ typedef struct tds_dynamic
 	 * This can happen for instance is tds protocol doesn't support dynamics or trying
 	 * to prepare query under Sybase that have BLOBs as parameters.
 	 */
-	TDS_TINYINT emulated;
+	bool emulated;
 	/**
 	 * true if dynamic was marker to be closed when connection is idle
 	 */
@@ -1009,6 +1014,7 @@ typedef struct tds_multiple
 /* forward declaration */
 typedef struct tds_context TDSCONTEXT;
 typedef int (*err_handler_t) (const TDSCONTEXT *, TDSSOCKET *, TDSMESSAGE *);
+typedef int (*int_handler_t) (void *);
 
 struct tds_context
 {
@@ -1075,6 +1081,7 @@ typedef struct tds_poll_wakeup
 struct tds_connection
 {
 	TDS_USMALLINT tds_version;
+	bool corked;
 	TDS_UINT product_version;	/**< version of product (Sybase/MS and full version) */
 	char *product_name;
 
@@ -1320,7 +1327,7 @@ void tds_srv_charset_changed(TDSCONNECTION * conn, const char *charset);
 void tds7_srv_charset_changed(TDSCONNECTION * conn, TDS_UCHAR collate[5]);
 int tds_iconv_alloc(TDSCONNECTION * conn);
 void tds_iconv_free(TDSCONNECTION * conn);
-TDSICONV *tds_iconv_from_collate(TDSCONNECTION * conn, TDS_UCHAR collate[5]);
+TDSICONV *tds_iconv_from_collate(TDSCONNECTION * conn, const TDS_UCHAR collate[5]);
 
 
 /* mem.c */
@@ -1347,7 +1354,7 @@ tds_release_cur_dyn(TDSSOCKET * tds)
 }
 void tds_dynamic_deallocated(TDSCONNECTION *conn, TDSDYNAMIC *dyn);
 void tds_set_cur_dyn(TDSSOCKET *tds, TDSDYNAMIC *dyn);
-TDSSOCKET *tds_realloc_socket(TDSSOCKET * tds, size_t bufsize);
+TDSSOCKET *tds_realloc_socket(TDSSOCKET * tds, unsigned int bufsize);
 char *tds_alloc_client_sqlstate(int msgno);
 char *tds_alloc_lookup_sqlstate(TDSSOCKET * tds, int msgno);
 TDSLOGIN *tds_alloc_login(bool use_environment);
@@ -1357,7 +1364,7 @@ TDSLOGIN *tds_init_login(TDSLOGIN * login, TDSLOCALE * locale);
 TDSLOCALE *tds_alloc_locale(void);
 void *tds_alloc_param_data(TDSCOLUMN * curparam);
 void tds_free_locale(TDSLOCALE * locale);
-TDSCURSOR * tds_alloc_cursor(TDSSOCKET * tds, const char *name, TDS_INT namelen, const char *query, TDS_INT querylen);
+TDSCURSOR * tds_alloc_cursor(TDSSOCKET * tds, const char *name, size_t namelen, const char *query, size_t querylen);
 void tds_free_row(TDSRESULTINFO * res_info, unsigned char *row);
 TDSSOCKET *tds_alloc_socket(TDSCONTEXT * context, unsigned int bufsize);
 TDSSOCKET *tds_alloc_additional_socket(TDSCONNECTION *conn);
@@ -1414,13 +1421,13 @@ TDSRET tds_submit_begin_tran(TDSSOCKET *tds);
 TDSRET tds_submit_rollback(TDSSOCKET *tds, bool cont);
 TDSRET tds_submit_commit(TDSSOCKET *tds, bool cont);
 TDSRET tds_disconnect(TDSSOCKET * tds);
-size_t tds_quote_id(TDSSOCKET * tds, char *buffer, const char *id, int idlen);
-size_t tds_quote_id_rpc(TDSSOCKET * tds, char *buffer, const char *id, int idlen);
-size_t tds_quote_string(TDSSOCKET * tds, char *buffer, const char *str, int len);
+size_t tds_quote_id(TDSSOCKET * tds, char *buffer, const char *id, ptrdiff_t idlen);
+size_t tds_quote_id_rpc(TDSSOCKET * tds, char *buffer, const char *id, ptrdiff_t idlen);
+size_t tds_quote_string(TDSSOCKET * tds, char *buffer, const char *str, ptrdiff_t len);
 const char *tds_skip_comment(const char *s);
 const char *tds_skip_quoted(const char *s);
 size_t tds_fix_column_size(TDSSOCKET * tds, TDSCOLUMN * curcol);
-const char *tds_convert_string(TDSSOCKET * tds, TDSICONV * char_conv, const char *s, int len, size_t *out_len);
+const char *tds_convert_string(TDSSOCKET * tds, TDSICONV * char_conv, const char *s, ptrdiff_t len, size_t *out_len);
 void tds_convert_string_free(const char *original, const char *converted);
 #if !ENABLE_EXTRA_CHECKS
 #define tds_convert_string_free(original, converted) \
@@ -1479,7 +1486,6 @@ int tds_put_smallint(TDSSOCKET * tds, TDS_SMALLINT si);
 #define tds_put_tinyint(tds, ti) tds_put_byte(tds,ti)
 int tds_put_byte(TDSSOCKET * tds, unsigned char c);
 TDSRET tds_flush_packet(TDSSOCKET * tds);
-int tds_put_buf(TDSSOCKET * tds, const unsigned char *buf, int dsize, int ssize);
 
 
 /* read.c */
@@ -1502,7 +1508,7 @@ DSTR* tds_dstr_get(TDSSOCKET * tds, DSTR * s, size_t len);
 /* util.c */
 int tdserror (const TDSCONTEXT * tds_ctx, TDSSOCKET * tds, int msgno, int errnum);
 TDS_STATE tds_set_state(TDSSOCKET * tds, TDS_STATE state);
-void tds_swap_bytes(void *buf, int bytes);
+void tds_swap_bytes(void *buf, size_t bytes);
 unsigned int tds_gettime_ms(void);
 
 
@@ -1547,15 +1553,16 @@ int tds7_get_instance_ports(FILE *output, struct addrinfo *addr);
 int tds7_get_instance_port(struct addrinfo *addr, const char *instance);
 char *tds_prwsaerror(int erc);
 void tds_prwsaerror_free(char *s);
-int tds_connection_read(TDSSOCKET * tds, unsigned char *buf, int buflen);
-int tds_connection_write(TDSSOCKET *tds, const unsigned char *buf, int buflen, int final);
+ptrdiff_t tds_connection_read(TDSSOCKET * tds, unsigned char *buf, size_t buflen);
+ptrdiff_t tds_connection_write(TDSSOCKET *tds, const unsigned char *buf, size_t buflen, int final);
+void tds_connection_coalesce(TDSSOCKET *tds);
+void tds_connection_flush(TDSSOCKET *tds);
 #define TDSSELREAD  POLLIN
 #define TDSSELWRITE POLLOUT
 int tds_select(TDSSOCKET * tds, unsigned tds_sel, int timeout_seconds);
 void tds_connection_close(TDSCONNECTION *conn);
-int tds_goodread(TDSSOCKET * tds, unsigned char *buf, int buflen);
-int tds_goodwrite(TDSSOCKET * tds, const unsigned char *buffer, size_t buflen);
-void tds_socket_flush(TDS_SYS_SOCKET sock);
+ptrdiff_t tds_goodread(TDSSOCKET * tds, unsigned char *buf, size_t buflen);
+ptrdiff_t tds_goodwrite(TDSSOCKET * tds, const unsigned char *buffer, size_t buflen);
 int tds_socket_set_nonblocking(TDS_SYS_SOCKET sock);
 int tds_wakeup_init(TDSPOLLWAKEUP *wakeup);
 void tds_wakeup_close(TDSPOLLWAKEUP *wakeup);
@@ -1590,7 +1597,7 @@ typedef struct tds_freeze {
 } TDSFREEZE;
 
 void tds_freeze(TDSSOCKET *tds, TDSFREEZE *freeze, unsigned size_len);
-size_t tds_freeze_written(TDSFREEZE *freeze);
+unsigned int tds_freeze_written(TDSFREEZE *freeze);
 TDSRET tds_freeze_abort(TDSFREEZE *freeze);
 TDSRET tds_freeze_close(TDSFREEZE *freeze);
 TDSRET tds_freeze_close_string(TDSFREEZE *freeze);
@@ -1652,7 +1659,7 @@ void tds_random_buffer(unsigned char *out, int len);
 /* sec_negotiate.c */
 TDSAUTHENTICATION * tds5_negotiate_get_auth(TDSSOCKET * tds);
 inline static void
-tds5_negotiate_set_msg_type(TDSAUTHENTICATION * tds_auth, unsigned msg_type)
+tds5_negotiate_set_msg_type(TDSAUTHENTICATION * tds_auth, uint16_t msg_type)
 {
 	if (tds_auth)
 		tds_auth->msg_type = msg_type;
@@ -1684,8 +1691,9 @@ struct tds_bcpinfo
 	DSTR tablename;
 	TDS_CHAR *insert_stmt;
 	TDS_INT direction;
-	TDS_INT identity_insert_on;
-	TDS_INT xfer_init;
+	bool identity_insert_on;
+	bool xfer_init;
+	bool datarows_locking;
 	TDS_INT bind_count;
 	TDSRESULTINFO *bindinfo;
 	TDS5COLINFO *sybase_colinfo;

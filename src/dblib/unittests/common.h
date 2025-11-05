@@ -2,9 +2,7 @@
 #ifndef _tdsguard_daeUPbmgBl59GOSecr8sMB_
 #define _tdsguard_daeUPbmgBl59GOSecr8sMB_
 
-#undef NDEBUG
-
-#include <config.h>
+#include <freetds/utils/test_base.h>
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -45,10 +43,6 @@
 #define FREETDS_SRCDIR FREETDS_TOPDIR "/src/dblib/unittests"
 #endif
 
-#if defined(HAVE__SNPRINTF) && !defined(HAVE_SNPRINTF)
-#define snprintf _snprintf
-#endif
-
 #ifdef DBNTWIN32
 /*
  * Define Sybase's symbols in terms of Microsoft's. 
@@ -85,10 +79,14 @@ extern int optopt;
 extern int opterr;
 extern int optreset;
 
-extern char PASSWORD[512];
-extern char USER[512];
-extern char SERVER[512];
-extern char DATABASE[512];
+/*
+ * Historical names for widely used values -- common code initializes
+ * them but then leaves the rest to tests.
+ */
+static const char *const PASSWORD TDS_UNUSED = common_pwd.password;
+static const char *const USER TDS_UNUSED = common_pwd.user;
+static const char *const SERVER TDS_UNUSED = common_pwd.server;
+static const char *const DATABASE TDS_UNUSED = common_pwd.database;
 
 void set_malloc_options(void);
 int read_login_info(int argc, char **argv);

@@ -3,8 +3,7 @@
 #include <stdarg.h>
 
 /* Testing: Client and server Messages */
-int
-main(void)
+TEST_MAIN()
 {
 	CS_CONTEXT *ctx;
 	CS_CONNECTION *conn;
@@ -143,9 +142,9 @@ main(void)
 		return 1;
 	}
 
-	ret = run_command(cmd, "DROP TABLE #ctlibarray3");
-	ret = run_command(cmd, "DROP TABLE #ctlibarray4");
-	ret = run_command(cmd, "DROP TABLE #ctlibarray5");
+	run_command(cmd, "DROP TABLE #ctlibarray3");
+	run_command(cmd, "DROP TABLE #ctlibarray4");
+	run_command(cmd, "DROP TABLE #ctlibarray5");
 
 	check_call(ct_diag, (conn, CS_STATUS, CS_ALLMSG_TYPE, CS_UNUSED, &num_msgs));
 

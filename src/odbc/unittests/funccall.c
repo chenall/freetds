@@ -5,8 +5,7 @@
 static void test_with_conversions(void);
 static void test_with_dbname(void);
 
-int
-main(void)
+TEST_MAIN()
 {
 	SQLINTEGER input, output;
 	SQLLEN ind, ind2, ind3, ind4;
@@ -161,7 +160,7 @@ main(void)
 	odbc_disconnect();
 
 	if (odbc_db_is_microsoft()) {
-		odbc_use_version3 = 1;
+		odbc_use_version3 = true;
 		odbc_connect();
 
 		test_with_conversions();

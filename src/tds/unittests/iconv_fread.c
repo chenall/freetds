@@ -33,10 +33,9 @@
 
 /* test tds_bcp_fread */
 
-static char buf[4096+80];
+static unsigned char buf[4096+80];
 
-int
-main(void)
+TEST_MAIN()
 {
 	static const char out_file[] = "iconv_fread.out";
 	int i;
@@ -84,8 +83,8 @@ main(void)
 			return 1;
 		}
 		memset(buf, 'a', i);
-		buf[i] = 0xC0 + (x >> 6);
-		buf[i+1] = 0x80 + (x & 0x3f);
+		buf[i] = (char) (0xC0 + (x >> 6));
+		buf[i+1] = (char) (0x80 + (x & 0x3f));
 		buf[i+2] = '!';
 		buf[i+3] = '!';
 
@@ -101,7 +100,7 @@ main(void)
 
 		/* test */
 		memset(buf, 'a', i);
-		buf[i] = (char) x;
+		buf[i] = x;
 		assert(TDS_SUCCEED(res));
 		if (out_len != i+1) {
 			fprintf(stderr, "out %u bytes expected %d\n",

@@ -46,12 +46,7 @@
 #include <freetds/convert.h>
 #include <freetds/utils/string.h>
 #include <freetds/replacements.h>
-
-/** \cond HIDDEN_SYMBOLS */
-#ifndef MAX
-#define MAX(a,b) ( (a) > (b) ? (a) : (b) )
-#endif
-/** \endcond */
+#include <freetds/enum_cap.h>
 
 /**
  * Holds clause buffer
@@ -63,7 +58,7 @@ typedef struct tds_pbcb
 	/** buffer length */
 	unsigned int cb;
 	/** true is buffer came from malloc */
-	unsigned int from_malloc;
+	bool from_malloc;
 } TDSPBCB;
 
 static TDSRET tds7_bcp_send_colmetadata(TDSSOCKET *tds, TDSBCPINFO *bcpinfo);
@@ -74,6 +69,7 @@ static int tds5_bcp_add_variable_columns(TDSBCPINFO *bcpinfo, tds_bcp_get_col_da
 					 int offset, TDS_UCHAR *rowbuffer, int start, int *pncols);
 static void tds_bcp_row_free(TDSRESULTINFO* result, unsigned char *row);
 static TDSRET tds5_process_insert_bulk_reply(TDSSOCKET * tds, TDSBCPINFO *bcpinfo);
+static TDSRET probe_sap_locking(TDSSOCKET *tds, TDSBCPINFO *bcpinfo);
 
 /**
  * Initialize BCP information.
@@ -94,6 +90,12 @@ tds_bcp_init(TDSSOCKET *tds, TDSBCPINFO *bcpinfo)
 	const char *fmt;
 
 	/* FIXME don't leave state in processing state */
+
+	/* Check table locking type. Do this first, because the code in bcp_init() which
+	 * calls us seems to depend on the information from the columns query still being
+	 * active in the context.
+	 */
+	probe_sap_locking(tds, bcpinfo);
 
 	/* TODO quote tablename if needed */
 	if (bcpinfo->direction != TDS_BCP_QUERYOUT)
@@ -162,14 +164,24 @@ tds_bcp_init(TDSSOCKET *tds, TDSBCPINFO *bcpinfo)
 		curcol->column_computed = resinfo->columns[i]->column_computed;
 		
 		memcpy(curcol->column_collation, resinfo->columns[i]->column_collation, 5);
-		
+
+		/* From MS documentation:
+		 * Note that for INSERT BULK operations, XMLTYPE is to be sent as NVARCHAR(N) or NVARCHAR(MAX)
+		 * data type. An error is produced if XMLTYPE is specified.
+		 */
+		if (curcol->on_server.column_type == SYBMSXML) {
+			curcol->on_server.column_type = XSYBNVARCHAR;
+			curcol->column_type = SYBVARCHAR;
+			memcpy(curcol->column_collation, tds->conn->collation, 5);
+		}
+
 		if (is_numeric_type(curcol->column_type)) {
 			curcol->bcp_column_data = tds_alloc_bcp_column_data(sizeof(TDS_NUMERIC));
 			((TDS_NUMERIC *) curcol->bcp_column_data->data)->precision = curcol->column_prec;
 			((TDS_NUMERIC *) curcol->bcp_column_data->data)->scale = curcol->column_scale;
 		} else {
 			curcol->bcp_column_data = 
-				tds_alloc_bcp_column_data(MAX(curcol->column_size,curcol->on_server.column_size));
+				tds_alloc_bcp_column_data(TDS_MAX(curcol->column_size,curcol->on_server.column_size));
 		}
 		if (!curcol->bcp_column_data)
 			goto cleanup;
@@ -198,11 +210,110 @@ tds_bcp_init(TDSSOCKET *tds, TDSBCPINFO *bcpinfo)
 
 	bcpinfo->bindinfo = bindinfo;
 	bcpinfo->bind_count = 0;
+
 	return TDS_SUCCESS;
 
 cleanup:
 	tds_free_results(bindinfo);
 	return rc;
+}
+
+/**
+ * Detect if table we're writing to uses 'datarows' lockmode.
+ * \tds
+ * \param bcpinfo BCP information already prepared
+ * \return TDS_SUCCESS or TDS_FAIL.
+ */
+static TDSRET
+probe_sap_locking(TDSSOCKET *tds, TDSBCPINFO *bcpinfo)
+{
+	TDSRET rc;
+	unsigned int value;
+	bool value_found;
+	TDS_INT resulttype;
+	const char *full_tablename, *rdot, *tablename;
+
+	/* Only needed for inward data */
+	if (bcpinfo->direction != TDS_BCP_IN)
+		return TDS_SUCCESS;
+
+	/* Only needed for SAP ASE versions which support datarows-locking. */
+	if (!TDS_IS_SYBASE(tds) || !tds_capability_has_req(tds->conn, TDS_REQ_DOL_BULK))
+		return TDS_SUCCESS;
+
+	/* A request to probe database.owner.tablename needs to check database.owner.sysobjects for tablename
+	 * (it doesn't work to check sysobjects for database.owner.tablename) */
+	full_tablename = tds_dstr_cstr(&bcpinfo->tablename);
+	rdot = strrchr(full_tablename, '.');
+
+	if (rdot != NULL)
+		tablename = rdot + 1;
+	else
+		tablename = full_tablename;
+
+	TDS_PROPAGATE(tds_submit_queryf(tds, "select sysstat2 from %.*ssysobjects where type='U' and name='%s'",
+					(int) (rdot ? (rdot - full_tablename + 1) : 0), full_tablename, tablename));
+
+	value = 0;
+	value_found = false;
+
+	while ((rc = tds_process_tokens(tds, &resulttype, NULL, TDS_TOKEN_RESULTS)) == TDS_SUCCESS) {
+		const unsigned int stop_mask = TDS_RETURN_DONE | TDS_RETURN_ROW;
+
+		if (resulttype != TDS_ROW_RESULT)
+			continue;
+
+		/* We must keep processing result tokens (even if we've found what we're looking for) so that the
+		 * stream is ready for subsequent queries. */
+		while ((rc = tds_process_tokens(tds, &resulttype, NULL, stop_mask)) == TDS_SUCCESS) {
+			TDSCOLUMN *col;
+			TDS_SERVER_TYPE ctype;
+			CONV_RESULT dres;
+			TDS_INT res;
+
+			if (resulttype != TDS_ROW_RESULT)
+				break;
+
+			/* Get INT4 from column 0 */
+			if (!tds->current_results || tds->current_results->num_cols < 1)
+				continue;
+
+			col = tds->current_results->columns[0];
+			if (col->column_cur_size < 0)
+				continue;
+
+			ctype = tds_get_conversion_type(col->column_type, col->column_size);
+			res = tds_convert(tds_get_ctx(tds), ctype, col->column_data, col->column_cur_size, SYBINT4, &dres);
+			if (res < 0)
+				continue;
+
+			value = dres.i;
+			value_found = true;
+		}
+	}
+	TDS_PROPAGATE(rc);
+
+	/* No valid result - Treat this as meaning the feature is lacking; it could be an old Sybase version for example */
+	if (!value_found) {
+		tdsdump_log(TDS_DBG_INFO1, "[DOL BULK] No valid result returned by probe.\n");
+		return TDS_SUCCESS;
+	}
+
+	/* Log and analyze result.
+	 * Sysstat2 flag values:
+	 *    https://infocenter.sybase.com/help/index.jsp?topic=/com.sybase.infocenter.help.ase.16.0/doc/html/title.html
+	 * 0x08000 - datarows locked
+	 * 0x20000 - clustered index present. (Not recommended for performance reasons to datarows-lock with clustered index) */
+	tdsdump_log(TDS_DBG_INFO1, "%x = sysstat2 for '%s'", value, full_tablename);
+
+	if (0x8000 & value) {
+		bcpinfo->datarows_locking = true;
+		tdsdump_log(TDS_DBG_INFO1, "Table has datarows-locking; enabling DOL BULK format.\n");
+
+		if (0x20000 & value)
+			tdsdump_log(TDS_DBG_WARN, "Table also has clustered index: bulk insert performance may be degraded.\n");
+	}
+	return TDS_SUCCESS;
 }
 
 /**
@@ -242,7 +353,7 @@ tds7_build_bulk_insert_stmt(TDSSOCKET * tds, TDSPBCB * clause, TDSCOLUMN * bcpco
 		strcpy(temp, clause->pb);
 		if (clause->from_malloc)
 			free(clause->pb);
-		clause->from_malloc = 1;
+		clause->from_malloc = true;
 		clause->pb = temp;
 		clause->cb *= 2;
 	}
@@ -276,7 +387,7 @@ tds_bcp_start_insert_stmt(TDSSOCKET * tds, TDSBCPINFO * bcpinfo)
 
 		colclause.pb = clause_buffer;
 		colclause.cb = sizeof(clause_buffer);
-		colclause.from_malloc = 0;
+		colclause.from_malloc = false;
 
 		/* TODO avoid asprintf, use always malloc-ed buffer */
 		firstcol = 1;
@@ -327,7 +438,8 @@ tds_bcp_start_insert_stmt(TDSSOCKET * tds, TDSBCPINFO * bcpinfo)
 }
 
 static TDSRET
-tds7_send_record(TDSSOCKET *tds, TDSBCPINFO *bcpinfo, tds_bcp_get_col_data get_col_data, int offset)
+tds7_send_record(TDSSOCKET *tds, TDSBCPINFO *bcpinfo,
+		 tds_bcp_get_col_data get_col_data, tds_bcp_null_error null_error, int offset)
 {
 	int i;
 
@@ -365,6 +477,11 @@ tds7_send_record(TDSSOCKET *tds, TDSBCPINFO *bcpinfo, tds_bcp_get_col_data get_c
 		save_data = bindcol->column_data;
 		assert(bindcol->column_data == NULL);
 		if (bindcol->bcp_column_data->is_null) {
+			if (!bindcol->column_nullable && !is_nullable_type(bindcol->on_server.column_type)) {
+				if (null_error)
+					null_error(bcpinfo, i, offset);
+				return TDS_FAIL;
+			}
 			bindcol->column_cur_size = -1;
 		} else if (is_blob_col(bindcol)) {
 			bindcol->column_cur_size = bindcol->bcp_column_data->datalen;
@@ -388,9 +505,10 @@ static TDSRET
 tds5_send_record(TDSSOCKET *tds, TDSBCPINFO *bcpinfo,
 		 tds_bcp_get_col_data get_col_data, tds_bcp_null_error null_error, int offset)
 {
-	int row_pos;
+	int row_pos = 0;
 	int row_sz_pos;
 	int blob_cols = 0;
+	int var_cols_pos;
 	int var_cols_written = 0;
 	TDS_INT	 old_record_size = bcpinfo->bindinfo->row_size;
 	unsigned char *record = bcpinfo->bindinfo->current_row;
@@ -398,11 +516,16 @@ tds5_send_record(TDSSOCKET *tds, TDSBCPINFO *bcpinfo,
 
 	memset(record, '\0', old_record_size);	/* zero the rowbuffer */
 
+	/* SAP ASE Datarows-locked tables expect additional 4 blank bytes before everything else */
+	if (bcpinfo->datarows_locking)
+		row_pos += 4;
+
 	/*
 	 * offset 0 = number of var columns
 	 * offset 1 = row number.  zeroed (datasever assigns)
 	 */
-	row_pos = 2;
+	var_cols_pos = row_pos;
+	row_pos += 2;
 
 	if ((row_pos = tds5_bcp_add_fixed_columns(bcpinfo, get_col_data, null_error, offset, record, row_pos)) < 0)
 		return TDS_FAIL;
@@ -418,7 +541,7 @@ tds5_send_record(TDSSOCKET *tds, TDSBCPINFO *bcpinfo,
 
 	if (var_cols_written) {
 		TDS_PUT_UA2LE(&record[row_sz_pos], row_pos);
-		record[0] = var_cols_written;
+		record[var_cols_pos] = var_cols_written;
 	}
 
 	tdsdump_log(TDS_DBG_INFO1, "old_record_size = %d new size = %d \n", old_record_size, row_pos);
@@ -436,7 +559,7 @@ tds5_send_record(TDSSOCKET *tds, TDSBCPINFO *bcpinfo,
 			TDS_PROPAGATE(get_col_data(bcpinfo, bindcol, offset));
 			/* unknown but zero */
 			tds_put_smallint(tds, 0);
-			tds_put_byte(tds, bindcol->on_server.column_type);
+			TDS_PUT_BYTE(tds, bindcol->on_server.column_type);
 			tds_put_byte(tds, 0xff - blob_cols);
 			/*
 			 * offset of txptr we stashed during variable
@@ -474,7 +597,7 @@ tds_bcp_send_record(TDSSOCKET *tds, TDSBCPINFO *bcpinfo,
 		return TDS_FAIL;
 
 	if (IS_TDS7_PLUS(tds->conn))
-		rc = tds7_send_record(tds, bcpinfo, get_col_data, offset);
+		rc = tds7_send_record(tds, bcpinfo, get_col_data, null_error, offset);
 	else
 		rc = tds5_send_record(tds, bcpinfo, get_col_data, null_error, offset);
 
@@ -631,7 +754,7 @@ tds5_bcp_add_variable_columns(TDSBCPINFO *bcpinfo, tds_bcp_get_col_data get_col_
 		 * Is this column of "variable" type, i.e. NULLable
 		 * or naturally variable length e.g. VARCHAR
 		 */
-		if (bcpinfo->sybase_count > i) {
+		if (bcpinfo->sybase_count > (TDS_INT) i) {
 			if (bcpinfo->sybase_colinfo[i].offset >= 0)
 				continue;
 		} else {
@@ -698,7 +821,7 @@ tds5_bcp_add_variable_columns(TDSBCPINFO *bcpinfo, tds_bcp_get_col_data get_col_
 	while (ncols && offsets[ncols] == offsets[ncols-1])
 		ncols--;	/* trailing NULL columns are not sent and are not included in the offset table */
 
-	if (ncols) {
+	if (ncols && !bcpinfo->datarows_locking) {
 		TDS_UCHAR *poff = rowbuffer + row_pos;
 		unsigned int pfx_top = offsets[ncols] >> 8;
 
@@ -721,6 +844,17 @@ tds5_bcp_add_variable_columns(TDSBCPINFO *bcpinfo, tds_bcp_get_col_data get_col_
 		for (i=0; i <= ncols; i++)
 			*poff++ = offsets[ncols-i] & 0xFF;
 		row_pos = (unsigned int)(poff - rowbuffer);
+	} else {		/* Datarows-locking */
+		unsigned int col;
+
+		for (col = ncols; col-- > 0;) {
+			/* The DOL BULK format has a much simpler row table -- it's just a 2-byte length for every
+			 * non-fixed column (does not have the extra "offset after the end" that the basic format has) */
+			rowbuffer[row_pos++] = offsets[col] % 256;
+			rowbuffer[row_pos++] = offsets[col] / 256;
+
+			tdsdump_log(TDS_DBG_FUNC, "[DOL BULK offset table] col=%u offset=%u\n", col, offsets[col]);
+		}
 	}
 
 	tdsdump_log(TDS_DBG_FUNC, "%4d %8d %8d\n", i, ncols, row_pos);
@@ -790,7 +924,7 @@ tds7_bcp_send_colmetadata(TDSSOCKET *tds, TDSBCPINFO *bcpinfo)
 		else
 			tds_put_smallint(tds, bcpcol->column_usertype);
 		tds_put_smallint(tds, bcpcol->column_flags);
-		tds_put_byte(tds, bcpcol->on_server.column_type);
+		TDS_PUT_BYTE(tds, bcpcol->on_server.column_type);
 
 		assert(bcpcol->funcs);
 		bcpcol->funcs->put_info(tds, bcpcol);
@@ -1120,8 +1254,7 @@ tds_bcp_start_copy_in(TDSSOCKET *tds, TDSBCPINFO *bcpinfo)
 			if (is_nullable_type(bcpcol->on_server.column_type) || bcpcol->column_nullable) {
 				var_cols++;
 				variable_col_len_tot += column_bcp_data_size;
-			}
-			else {
+			} else {
 				fixed_col_len_tot += column_bcp_data_size;
 			}
 		}

@@ -2,14 +2,8 @@
 
 static SQLCHAR output[256];
 
-#ifdef TDS_NO_DM
-static const int tds_no_dm = 1;
-#else
-static const int tds_no_dm = 0;
-#endif
-
 static int
-test(int odbc3)
+test(bool odbc3)
 {
 	SQLLEN cnamesize;
 	const char *query;
@@ -91,18 +85,17 @@ test(int odbc3)
 	return 0;
 }
 
-int
-main(void)
+TEST_MAIN()
 {
 	int ret;
 
 	/* ODBC 2 */
-	ret = test(0);
+	ret = test(false);
 	if (ret != 0)
 		return ret;
 
 	/* ODBC 3 */
-	ret = test(1);
+	ret = test(true);
 	if (ret != 0)
 		return ret;
 

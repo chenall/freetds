@@ -1,8 +1,7 @@
 /* Test some data from server. Currently tests MS XML type */
 #include "common.h"
 
-int
-main(int argc, char *argv[])
+TEST_MAIN()
 {
 	CS_CONTEXT *ctx;
 	CS_CONNECTION *conn;
@@ -92,7 +91,6 @@ main(int argc, char *argv[])
 		ret = ct_results(cmd, &result_type);
 	} while (ret == CS_SUCCEED);
 
-	ret = ct_results(cmd, &result_type);
 	assert(ret == CS_END_RESULTS);
 
 	if (verbose) {

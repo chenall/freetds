@@ -20,8 +20,8 @@
 /*
  * Purpose: test path utilities.
  */
-#undef NDEBUG
-#include <config.h>
+
+#include <freetds/utils/test_base.h>
 
 #include <assert.h>
 #include <stdio.h>
@@ -33,6 +33,7 @@
 #endif /* HAVE_UNISTD_H */
 
 #include <freetds/macros.h>
+#include <freetds/sysdep_private.h>
 #include <freetds/utils/path.h>
 
 #ifdef _WIN32
@@ -41,7 +42,7 @@ enum { is_windows = 1 };
 enum { is_windows = 0 };
 #endif
 
-int main(void)
+TEST_MAIN()
 {
 	tds_dir_char *path;
 	size_t len;

@@ -1,18 +1,14 @@
 /* test SQLGetDescRec */
 #include "common.h"
 
-static char software_version[] = "$Id: descrec.c,v 1.3 2011-07-12 10:16:59 freddy77 Exp $";
-static void *no_unused_var_warn[] = { software_version, no_unused_var_warn };
-
-int
-main(void)
+TEST_MAIN()
 {
 	SQLHDESC Descriptor;
 	SQLINTEGER ind;
 	SQLTCHAR name[128];
 	SQLSMALLINT si;
 
-	odbc_use_version3 = 1;
+	odbc_use_version3 = true;
 	odbc_connect();
 
 	odbc_command("create table #tmp1 (i int)");

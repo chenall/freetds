@@ -100,7 +100,6 @@ test(int per_process)
 	DBPROCESS *dbproc;
 	int i, r;
 	RETCODE erc, row_code;
-	int num_resultset = 0;
 	char teststr[1024];
 	char timeout[32];
 
@@ -206,7 +205,7 @@ test(int per_process)
 
 	start_time = time(NULL);	/* keep track of when we started for reporting purposes */
 	ntimeouts = 0;
-	dbsetinterrupt(dbproc, (void*)chkintr, (void*)hndlintr);
+	dbsetinterrupt(dbproc, (DB_DBCHKINTR_FUNC)chkintr, (DB_DBHNDLINTR_FUNC)hndlintr);
 
 	if (FAIL == dbsqlsend(dbproc)) {
 		fprintf(stderr, "Failed: dbsend\n");
@@ -235,7 +234,6 @@ test(int per_process)
 			printf("dbrows() returned SUCCEED, processing rows\n");
 
 			ncols = dbnumcols(dbproc);
-			++num_resultset;
 			printf("bound 1 of %d columns ('%s') in result %d.\n", ncols, dbcolname(dbproc, 1), ++r);
 			dbbind(dbproc, 1, STRINGBIND, 0, (BYTE *) teststr);
 
@@ -276,8 +274,7 @@ test(int per_process)
 	} /* while dbresults */
 }
 
-int
-main(int argc, char **argv)
+TEST_MAIN()
 {
 	set_malloc_options();
 

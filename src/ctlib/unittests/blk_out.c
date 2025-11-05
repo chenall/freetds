@@ -3,8 +3,7 @@
 #include <bkpublic.h>
 
 /* Testing: array binding of result set */
-int
-main(void)
+TEST_MAIN()
 {
 	CS_CONTEXT *ctx;
 	CS_CONNECTION *conn;
@@ -37,7 +36,7 @@ main(void)
 	check_call(try_ctlogin, (&ctx, &conn, &cmd, verbose));
 
 	/* do not test error */
-	ret = run_command(cmd, "IF OBJECT_ID('tempdb..#ctlibarray') IS NOT NULL DROP TABLE #ctlibarray");
+	run_command(cmd, "IF OBJECT_ID('tempdb..#ctlibarray') IS NOT NULL DROP TABLE #ctlibarray");
 
 	check_call(run_command, (cmd, "CREATE TABLE #ctlibarray (col1 int null,  col2 char(4) not null, col3 datetime not null)"));
 	check_call(run_command, (cmd, "insert into #ctlibarray values (1, 'AAAA', 'Jan  1 2002 10:00:00AM')"));

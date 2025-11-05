@@ -62,11 +62,6 @@ static int tds_count_placeholders_ucs2le(const char *query, const char *query_en
 #define TDS_PUT_DATA_PREFIX_NAME 2
 #define TDS_PUT_DATA_LONG_STATUS 4
 
-#undef MIN
-#define MIN(a,b) (((a) < (b)) ? (a) : (b))
-#undef MAX
-#define MAX(a,b) (((a) > (b)) ? (a) : (b))
-
 /* All manner of client to server submittal functions */
 
 /**
@@ -123,7 +118,7 @@ tds_ascii_to_ucs2(char *buffer, const char *buf)
  * \return string allocated (or input pointer if no conversion required) or NULL if error
  */
 const char *
-tds_convert_string(TDSSOCKET * tds, TDSICONV * char_conv, const char *s, int len, size_t *out_len)
+tds_convert_string(TDSSOCKET * tds, TDSICONV * char_conv, const char *s, ptrdiff_t len, size_t *out_len)
 {
 	char *buf;
 
@@ -401,7 +396,9 @@ tds_submit_query_params(TDSSOCKET * tds, const char *query, TDSPARAMINFO * param
 		TDSFREEZE outer;
 		TDSRET rc;
 
-		converted_query = tds_convert_string(tds, tds->conn->char_convs[client2ucs2], query, (int)query_len, &converted_query_len);
+		converted_query =
+			tds_convert_string(tds, tds->conn->char_convs[client2ucs2],
+					   query, query_len, &converted_query_len);
 		if (!converted_query) {
 			tds_set_state(tds, TDS_IDLE);
 			return TDS_FAIL;
@@ -743,13 +740,15 @@ tds_get_column_declaration(TDSSOCKET * tds, TDSCOLUMN * curcol, char *out)
 	/* unsigned int is required by printf format, don't use size_t */
 	unsigned int max_len = IS_TDS7_PLUS(tds->conn) ? 8000 : 255;
 	unsigned int size;
+	TDS_SERVER_TYPE conversion_type;
 
 	CHECK_TDS_EXTRA(tds);
 	CHECK_COLUMN_EXTRA(curcol);
 
-	size = tds_fix_column_size(tds, curcol);
+	size = (unsigned int) tds_fix_column_size(tds, curcol);
 
-	switch (tds_get_conversion_type(curcol->on_server.column_type, curcol->on_server.column_size)) {
+	conversion_type = tds_get_conversion_type(curcol->on_server.column_type, curcol->on_server.column_size);
+	switch (conversion_type) {
 	case XSYBCHAR:
 		if (IS_TDS50(tds->conn)) {
 			max_len = 32767;
@@ -783,6 +782,7 @@ tds_get_column_declaration(TDSSOCKET * tds, TDSCOLUMN * curcol, char *out)
 		fmt = "INT";
 		break;
 	case SYBINT8:
+	case SYB5INT8:
 		/* TODO even for Sybase ?? */
 		fmt = "BIGINT";
 		break;
@@ -916,24 +916,40 @@ tds_get_column_declaration(TDSSOCKET * tds, TDSCOLUMN * curcol, char *out)
 	case SYBUINT8:
 		fmt = "UNSIGNED BIGINT";
 		break;
+	case SYBXML:
+	case SYBMSXML:
+		fmt = "XML";
+		break;
+	case SYBUNITEXT:
+		fmt = "UNITEXT";
+		break;
 		/* nullable types should not occur here... */
 	case SYBFLTN:
 	case SYBMONEYN:
 	case SYBDATETIMN:
 	case SYBBITN:
 	case SYBINTN:
+	case SYBUINTN:
+	case SYBDATEN:
+	case SYBTIMEN:
 		assert(0);
 		/* TODO... */
+#if ENABLE_EXTRA_CHECKS
 	case SYBVOID:
 	case SYBSINT1:
+	case SYBMSUDT:
+	case SYBMSTABLE:
+	case SYBINTERVAL:
+#else
 	default:
-		tdsdump_log(TDS_DBG_ERROR, "Unknown type %d\n", tds_get_conversion_type(curcol->on_server.column_type, curcol->on_server.column_size));
+#endif
+		tdsdump_log(TDS_DBG_ERROR, "Unknown type %d\n", conversion_type);
 		break;
 	}
 
 	if (fmt) {
 		/* fill out */
-		sprintf(out, fmt, size > 0 ? MIN(size, max_len) : 1u);
+		sprintf(out, fmt, size > 0 ? TDS_MIN(size, max_len) : 1u);
 		return TDS_SUCCESS;
 	}
 
@@ -956,7 +972,7 @@ tds7_write_param_def_from_query(TDSSOCKET * tds, const char* converted_query, si
 {
 	char declaration[128], *p;
 	int i, count;
-	size_t written;
+	unsigned int written;
 	TDSFREEZE outer, inner;
 
 	assert(IS_TDS7_PLUS(tds->conn));
@@ -1022,7 +1038,7 @@ tds7_write_param_def_from_params(TDSSOCKET * tds, const char* query, size_t quer
 		size_t len;
 	} *ids = NULL;
 	TDSFREEZE outer, inner;
-	size_t written;
+	unsigned int written;
 
 	assert(IS_TDS7_PLUS(tds->conn));
 
@@ -1079,8 +1095,8 @@ tds7_write_param_def_from_params(TDSSOCKET * tds, const char* query, size_t quer
 		if (ids[i].p) {
 			tds_put_n(tds, ids[i].p, ids[i].len);
 		} else {
-			tds_put_string(tds, tds_dstr_cstr(&params->columns[i]->column_name),
-				       tds_dstr_len(&params->columns[i]->column_name));
+			const DSTR *name = &params->columns[i]->column_name;
+			tds_put_string(tds, tds_dstr_cstr(name), (int) tds_dstr_len(name));
 		}
 		tds_put_smallint(tds, ' ');
 
@@ -1205,7 +1221,7 @@ tds_submit_prepare(TDSSOCKET * tds, const char *query, const char *id, TDSDYNAMI
 	}
 
 	if (!IS_TDS50(tds->conn) && !IS_TDS7_PLUS(tds->conn)) {
-		dyn->emulated = 1;
+		dyn->emulated = true;
 		tds_dynamic_deallocated(tds->conn, dyn);
 		tds_set_state(tds, TDS_IDLE);
 		return TDS_SUCCESS;
@@ -1310,7 +1326,7 @@ tds_submit_execdirect(TDSSOCKET * tds, const char *query, TDSPARAMINFO * params,
 	size_t query_len;
 	TDSCOLUMN *param;
 	TDSDYNAMIC *dyn;
-	size_t id_len;
+	unsigned int id_len;
 	TDSFREEZE outer;
 
 	CHECK_TDS_EXTRA(tds);
@@ -1388,7 +1404,7 @@ tds_submit_execdirect(TDSSOCKET * tds, const char *query, TDSPARAMINFO * params,
 		if (!params) {
 			ret = tds_submit_query(tds, query);
 		} else {
-			dyn->emulated = 1;
+			dyn->emulated = true;
 			dyn->params = params;
 			dyn->query = strdup(query);
 			if (!dyn->query)
@@ -1417,7 +1433,7 @@ tds_submit_execdirect(TDSSOCKET * tds, const char *query, TDSPARAMINFO * params,
 
 	tds->out_flag = TDS_NORMAL;
 
-	id_len = strlen(dyn->id);
+	id_len = (unsigned int) strlen(dyn->id);
 	tds_put_byte(tds, TDS5_DYNAMIC_TOKEN);
 	tds_freeze(tds, &outer, 2);
 	tds_put_byte(tds, TDS_DYN_EXEC_IMMED);
@@ -1552,7 +1568,7 @@ tds_fix_column_size(TDSSOCKET * tds TDS_UNUSED, TDSCOLUMN * curcol)
 
 	switch (curcol->column_varint_size) {
 	case 1:
-		size = MAX(MIN(size, 255), 1);
+		size = TDS_CLAMP(size, 1, 255);
 		break;
 	case 2:
 		/* note that varchar(max)/varbinary(max) have a varint of 8 */
@@ -1560,7 +1576,7 @@ tds_fix_column_size(TDSSOCKET * tds TDS_UNUSED, TDSCOLUMN * curcol)
 			min = 2;
 		else
 			min = 1;
-		size = MAX(MIN(size, 8000u), min);
+		size = TDS_CLAMP(size, min, 8000u);
 		break;
 	case 4:
 		if (curcol->on_server.column_type == SYBNTEXT)
@@ -1590,7 +1606,7 @@ tds_put_data_info(TDSSOCKET * tds, TDSCOLUMN * curcol, int flags)
 	CHECK_COLUMN_EXTRA(curcol);
 
 	if (flags & TDS_PUT_DATA_USE_NAME) {
-		len = tds_dstr_len(&curcol->column_name);
+		len = (int) tds_dstr_len(&curcol->column_name);
 		tdsdump_log(TDS_DBG_ERROR, "tds_put_data_info putting param_name \n");
 
 		if (IS_TDS7_PLUS(tds->conn)) {
@@ -1620,7 +1636,7 @@ tds_put_data_info(TDSSOCKET * tds, TDSCOLUMN * curcol, int flags)
 		tds_put_byte(tds, curcol->column_output);	/* status (input) */
 	if (!IS_TDS7_PLUS(tds->conn))
 		tds_put_int(tds, curcol->column_usertype);	/* usertype */
-	tds_put_byte(tds, curcol->on_server.column_type);
+	TDS_PUT_BYTE(tds, curcol->on_server.column_type);
 
 	if (curcol->funcs->put_info(tds, curcol) != TDS_SUCCESS)
 		return TDS_FAIL;
@@ -1951,7 +1967,7 @@ tds4_send_emulated_rpc(TDSSOCKET * tds, const char *rpc_name, TDSPARAMINFO * par
 		param = params->columns[i];
 		tds_put_string(tds, sep, -1);
 		if (!tds_dstr_isempty(&param->column_name)) {
-			tds_put_string(tds, tds_dstr_cstr(&param->column_name), tds_dstr_len(&param->column_name));
+			tds_put_string(tds, tds_dstr_cstr(&param->column_name), (int)tds_dstr_len(&param->column_name));
 			tds_put_string(tds, "=", 1);
 		}
 		if (param->column_output) {
@@ -2208,7 +2224,7 @@ tds_quote(char *buffer, char quoting, const char *id, size_t len)
  * \see tds_quote_id_rpc
  */
 size_t
-tds_quote_id(TDSSOCKET * tds, char *buffer, const char *id, int idlen)
+tds_quote_id(TDSSOCKET * tds, char *buffer, const char *id, ptrdiff_t idlen)
 {
 	size_t i, len;
 
@@ -2253,7 +2269,7 @@ tds_quote_id(TDSSOCKET * tds, char *buffer, const char *id, int idlen)
  * \see tds_quote_id
  */
 size_t
-tds_quote_id_rpc(TDSSOCKET * tds, char *buffer, const char *id, int idlen)
+tds_quote_id_rpc(TDSSOCKET * tds, char *buffer, const char *id, ptrdiff_t idlen)
 {
 	size_t len;
 	/* We are quoting for RPC calls, not base language queries. For RPC calls Sybase
@@ -2278,7 +2294,7 @@ tds_quote_id_rpc(TDSSOCKET * tds, char *buffer, const char *id, int idlen)
  * \result written chars (not including needed terminator)
  */
 size_t
-tds_quote_string(TDSSOCKET * tds TDS_UNUSED, char *buffer, const char *str, int len)
+tds_quote_string(TDSSOCKET * tds TDS_UNUSED, char *buffer, const char *str, ptrdiff_t len)
 {
 	return tds_quote(buffer, '\'', str, len < 0 ? strlen(str) : (size_t) len);
 }
@@ -2386,8 +2402,9 @@ tds_cursor_open(TDSSOCKET * tds, TDSCURSOR * cursor, TDSPARAMINFO *params, bool 
 		TDSRET rc = TDS_SUCCESS;
 
 		/* cursor statement */
-		converted_query = tds_convert_string(tds, tds->conn->char_convs[client2ucs2],
-						     cursor->query, (int)strlen(cursor->query), &converted_query_len);
+		converted_query =
+			tds_convert_string(tds, tds->conn->char_convs[client2ucs2], cursor->query,
+					   strlen(cursor->query), &converted_query_len);
 		if (!converted_query) {
 			if (!*something_to_send)
 				tds_set_state(tds, TDS_IDLE);
@@ -2848,7 +2865,7 @@ TDSRET
 tds_cursor_setname(TDSSOCKET * tds, TDSCURSOR * cursor)
 {
 	TDSFREEZE outer;
-	size_t written;
+	unsigned int written;
 
 	CHECK_TDS_EXTRA(tds);
 
@@ -2981,7 +2998,7 @@ tds_cursor_update(TDSSOCKET * tds, TDSCURSOR * cursor, TDS_CURSOR_OPERATION op, 
 			unsigned int n, num_params;
 			const char *table_name = NULL;
 			TDSFREEZE outer;
-			size_t written;
+			unsigned int written;
 
 			/* empty table name */
 			tds_put_byte(tds, 0);

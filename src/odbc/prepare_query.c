@@ -37,6 +37,7 @@
 #include <freetds/odbc.h>
 #include <freetds/convert.h>
 #include <freetds/utils/string.h>
+#include <freetds/checks.h>
 
 #define TDS_ISSPACE(c) isspace((unsigned char) (c))
 
@@ -151,7 +152,7 @@ prepared_rpc(struct _hstmt *stmt, bool compute_row)
 						curcol->column_cur_size = len;
 					break;
 				case SYBINT4:
-					*((TDS_INT *) dest) = strtol(start, NULL, 10);
+					*((TDS_INT *) dest) = atoi(start);
 					break;
 				case SYBINT8:
 					*((TDS_INT8 *) dest) = tds_strtoll(start, NULL, 10);
@@ -207,7 +208,7 @@ parse_prepared_query(struct _hstmt *stmt, bool compute_row)
 
 	tdsdump_log(TDS_DBG_FUNC, "parsing %d parameters\n", nparam);
 
-	for (; stmt->param_num <= stmt->param_count; ++nparam, ++stmt->param_num) {
+	for (; stmt->param_num <= (int) stmt->param_count; ++nparam, ++stmt->param_num) {
 		/* find bound parameter */
 		if (stmt->param_num > stmt->apd->header.sql_desc_count || stmt->param_num > stmt->ipd->header.sql_desc_count) {
 			tdsdump_log(TDS_DBG_FUNC, "parse_prepared_query: logic_error: parameter out of bounds: "
@@ -247,10 +248,10 @@ start_parse_prepared_query(struct _hstmt *stmt, bool compute_row)
 	return parse_prepared_query(stmt, compute_row);
 }
 
-static TDS_INT
-odbc_wchar2hex(TDS_CHAR *dest, TDS_UINT destlen, const SQLWCHAR * src, TDS_UINT srclen)
+static ptrdiff_t
+odbc_wchar2hex(TDS_CHAR *dest, size_t destlen, const SQLWCHAR * src, size_t srclen)
 {
-	unsigned int i;
+	size_t i;
 	SQLWCHAR hex1, c = 0;
 
 	/* if srclen if odd we must add a "0" before ... */
@@ -266,16 +267,16 @@ odbc_wchar2hex(TDS_CHAR *dest, TDS_UINT destlen, const SQLWCHAR * src, TDS_UINT 
 		if ('0' <= hex1 && hex1 <= '9')
 			hex1 &= 0x0f;
 		else {
-			hex1 &= (SQLWCHAR) ~0x20u;	/* mask off 0x20 to ensure upper case */
-			if ('A' <= hex1 && hex1 <= 'F') {
-				hex1 -= ('A' - 10);
+			hex1 |= 0x20;	/* ensure lower case */
+			if ('a' <= hex1 && hex1 <= 'f') {
+				hex1 -= ('a' - 10);
 			} else {
 				tdsdump_log(TDS_DBG_INFO1,
 					    "error_handler:  attempt to convert data stopped by syntax error in source field \n");
 				return TDS_CONVERT_SYNTAX;
 			}
 		}
-		assert(hex1 < 0x10);
+		tds_extra_assert(hex1 < 0x10);
 
 		if ((i/2u) >= destlen)
 			continue;
@@ -364,8 +365,10 @@ continue_parse_prepared_query(struct _hstmt *stmt, SQLPOINTER DataPtr, SQLLEN St
 		break;
 	}
 
-	if (!blob && len > need_bytes)
-		len = need_bytes;
+	if (!blob && len > need_bytes) {
+		odbc_errs_add(&stmt->errs, "22001", NULL);
+		return SQL_ERROR;
+	}
 
 	/* copy to destination */
 	if (blob) {
@@ -403,7 +406,7 @@ continue_parse_prepared_query(struct _hstmt *stmt, SQLPOINTER DataPtr, SQLLEN St
 
 		p += curcol->column_cur_size;
 		if (binary_convert) {
-			int res;
+			ptrdiff_t res;
 
 			len = orig_len;
 
@@ -415,7 +418,7 @@ continue_parse_prepared_query(struct _hstmt *stmt, SQLPOINTER DataPtr, SQLLEN St
 
 				res = odbc_wchar2hex(p, 1, data, 2);
 				if (res < 0) {
-					odbc_convert_err_set(&stmt->errs, res);
+					odbc_convert_err_set(&stmt->errs, (TDS_INT) res);
 					return SQL_ERROR;
 				}
 				p += res;
@@ -427,14 +430,15 @@ continue_parse_prepared_query(struct _hstmt *stmt, SQLPOINTER DataPtr, SQLLEN St
 
 			if (len&1) {
 				--len;
-				curcol->column_text_sqlputdatainfo = (sql_src_type == SQL_C_CHAR) ? ((char*)DataPtr)[len] : ((SQLWCHAR*)DataPtr)[len];
+				curcol->column_text_sqlputdatainfo =
+					(sql_src_type == SQL_C_CHAR) ? ((char*)DataPtr)[len] : ((SQLWCHAR*)DataPtr)[len];
 			}
 
 			res = (sql_src_type == SQL_C_CHAR) ?
 				tds_char2hex(p, len / 2u, (const TDS_CHAR*) DataPtr, len):
 				odbc_wchar2hex(p, len / 2u, (const SQLWCHAR*) DataPtr, len);
 			if (res < 0) {
-				odbc_convert_err_set(&stmt->errs, res);
+				odbc_convert_err_set(&stmt->errs, (TDS_INT) res);
 				return SQL_ERROR;
 			}
 			p += res;
@@ -443,7 +447,7 @@ continue_parse_prepared_query(struct _hstmt *stmt, SQLPOINTER DataPtr, SQLLEN St
 		} else {
 			memcpy(blob->textvalue + curcol->column_cur_size, DataPtr, len);
 		}
-	} else {
+	} else if (len > 0) {
 		memcpy(curcol->column_data + curcol->column_cur_size, DataPtr, len);
 	}
 

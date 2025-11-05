@@ -62,26 +62,27 @@ $   SAY "Using replacement socketpair()"
 $ ENDIF
 $!
 $!
-$! Enable OpenSSL if we have it. Don't bother looking for 0.9.x versions
+$! Enable OpenSSL if we have it. Don't bother looking for pre-1.1.1 versions
 $!
 $ d_rsa_get0_key = "0"
-$ IF F$SEARCH("SSL111$INCLUDE:SSL.H") .NES. ""
+$ IF F$SEARCH("SSL3$INCLUDE:SSL.H") .NES. ""
 $ THEN
 $   d_openssl = "1"
 $   d_rsa_get0_key = "1"
-$   SAY "Found OpenSSL 1.1.x and creating linker options file..."
+$   SAY "Found OpenSSL 3.x and creating linker options file..."
 $   OPEN/WRITE sslopt openssl.opt
-$   WRITE sslopt "SYS$SHARE:SSL111$LIBSSL_SHR32.EXE/SHARE"
-$   WRITE sslopt "SYS$SHARE:SSL111$LIBCRYPTO_SHR32.EXE/SHARE"
+$   WRITE sslopt "SYS$SHARE:SSL3$LIBSSL_SHR32.EXE/SHARE"
+$   WRITE sslopt "SYS$SHARE:SSL3$LIBCRYPTO_SHR32.EXE/SHARE"
 $   CLOSE sslopt
 $ ELSE
-$   IF F$SEARCH("SSL1$INCLUDE:SSL.H") .NES. ""
+$   IF F$SEARCH("SSL111$INCLUDE:SSL.H") .NES. ""
 $   THEN
 $     d_openssl = "1"
-$     SAY "Found OpenSSL 1.0.x and creating linker options file..."
+$     d_rsa_get0_key = "1"
+$     SAY "Found OpenSSL 1.1.x and creating linker options file..."
 $     OPEN/WRITE sslopt openssl.opt
-$     WRITE sslopt "SYS$SHARE:SSL1$LIBSSL_SHR32.EXE/SHARE"
-$     WRITE sslopt "SYS$SHARE:SSL1$LIBCRYPTO_SHR32.EXE/SHARE"
+$     WRITE sslopt "SYS$SHARE:SSL111$LIBSSL_SHR32.EXE/SHARE"
+$     WRITE sslopt "SYS$SHARE:SSL111$LIBCRYPTO_SHR32.EXE/SHARE"
 $     CLOSE sslopt
 $   ELSE
 $     d_openssl = "0"
@@ -266,14 +267,23 @@ $!
 $! Check for vasprintf
 $!
 $ OS
-$ WS "#include <stdarg.h>"
 $ WS "#include <stdio.h>"
 $ WS "#include <stdlib.h>"
-$ WS "int main()"
+$ WS "#include <stdarg.h>"
+$ WS "void try_vasprintf(const char *fmt, ...)"
 $ WS "{"
-$ WS "char *ptr;
-$ WS "vasprintf(&ptr,""%d,%d"",1,2);"
-$ WS "exit(0);"
+$ WS "    char* dyn_buf;"
+$ WS "    va_list args;"
+$ WS "    va_start(args, fmt);"
+$ WS "    const int written = vasprintf(&dyn_buf, fmt, args);"
+$ WS "    va_end(args);"
+$ WS "    free(dyn_buf);"
+$ WS "    if (written == 18) exit(0);"
+$ WS "    exit(1);"
+$ WS "}"
+$ WS "int main(void)"
+$ WS "{"
+$ WS "    try_vasprintf(""Testing... %d, %d, %d"", 1, 2, 3);"
 $ WS "}"
 $ CS
 $ tmp = "vasprintf"

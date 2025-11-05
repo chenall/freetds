@@ -141,19 +141,7 @@ tds_put_string(TDSSOCKET * tds, const char *s, int len)
 	tds_dataout_stream_init(&w, tds);
 
 	res = tds_convert_stream(tds, tds->conn->char_convs[iconv_entry], to_server, &r.stream, &w.stream);
-	return w.written;
-}
-
-int
-tds_put_buf(TDSSOCKET * tds, const unsigned char *buf, int dsize, int ssize)
-{
-	int cpsize;
-
-	cpsize = ssize > dsize ? dsize : ssize;
-	tds_put_n(tds, buf, cpsize);
-	dsize -= cpsize;
-	tds_put_n(tds, NULL, dsize);
-	return tds_put_byte(tds, cpsize);
+	return (int) w.written;
 }
 
 int

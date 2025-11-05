@@ -138,7 +138,7 @@ odbc_bcp_init(TDS_DBC *dbc, const ODBC_CHAR *tblname, const ODBC_CHAR *hfile,
 
 	dbc->bcpinfo->direction = direction;
 
-	dbc->bcpinfo->xfer_init  = 0;
+	dbc->bcpinfo->xfer_init = false;
 	dbc->bcpinfo->bind_count = 0;
 
 	if (TDS_FAILED(tds_bcp_init(dbc->tds_socket, dbc->bcpinfo))) {
@@ -263,13 +263,13 @@ odbc_bcp_sendrow(TDS_DBC *dbc)
 	 * The first time sendrow is called after bcp_init,
 	 * there is a certain amount of initialisation to be done.
 	 */
-	if (dbc->bcpinfo->xfer_init == 0) {
+	if (!dbc->bcpinfo->xfer_init) {
 
 		/* The start_copy function retrieves details of the table's columns */
 		if (TDS_FAILED(tds_bcp_start_copy_in(tds, dbc->bcpinfo)))
 			ODBCBCP_ERROR_RETURN("HY000");
 
-		dbc->bcpinfo->xfer_init = 1;
+		dbc->bcpinfo->xfer_init = true;
 	}
 
 	dbc->bcpinfo->parent = dbc;
@@ -435,17 +435,15 @@ _bcp_iconv_helper(const TDS_DBC *dbc, const TDSCOLUMN *bindcol, const TDS_CHAR *
 	return destlen;
 }
 
-static SQLLEN
+static TDS_INT
 _tdsodbc_dbconvert(TDS_DBC *dbc, int srctype, const TDS_CHAR * src, SQLLEN src_len,
 		   int desttype, unsigned char * dest, TDSCOLUMN *bindcol)
 {
 	CONV_RESULT dres;
-	SQLLEN ret;
-	SQLLEN len;
-	SQLLEN destlen = bindcol->column_size;
-	TDS_DATETIMEALL dta;
-	TDS_NUMERIC num;
-	SQL_NUMERIC_STRUCT * sql_num;
+	TDS_INT ret;
+	TDS_INT len;
+	TDS_INT destlen = bindcol->column_size;
+	ODBC_CONVERT_BUF convert_buf;
 	bool always_convert = false;
 
 	assert(src_len >= 0);
@@ -458,27 +456,16 @@ _tdsodbc_dbconvert(TDS_DBC *dbc, int srctype, const TDS_CHAR * src, SQLLEN src_l
 
 	switch (srctype) {
 	case SYBMSDATETIME2:
-		convert_datetime2server(SQL_C_TYPE_TIMESTAMP, src, &dta);
-		dta.time_prec = (destlen - 40) / 2;
-		src = (char *) &dta;
+		convert_datetime2server(SQL_C_TYPE_TIMESTAMP, src, &convert_buf.dta);
+		convert_buf.dta.time_prec = (destlen - 40) / 2;
+		src = (char *) &convert_buf.dta;
 		break;
 	case SYBDECIMAL:
 	case SYBNUMERIC:
-		sql_num = (SQL_NUMERIC_STRUCT *) src;
-		num.precision = sql_num->precision;
-		num.scale = sql_num->scale;
-		num.array[0] = sql_num->sign ^ 1;
-		/* test precision so client do not crash our library */
-		if (num.precision <= 0 || num.precision > 38 || num.scale > num.precision)
-			/* TODO add proper error */
+		if (convert_numeric2server(&dbc->errs, src, &convert_buf.num) <= 0)
 			return -1;
-		len = tds_numeric_bytes_per_prec[num.precision];
-		memcpy(num.array + 1, sql_num->val, len - 1);
-		tds_swap_bytes(num.array + 1, len - 1);
-		if (len < sizeof(num.array))
-			memset(num.array + len, 0, sizeof(num.array) - len);
-		src = (char *) &num;
-		always_convert = num.scale != bindcol->column_scale;
+		src = (char *) &convert_buf.num;
+		always_convert = convert_buf.num.scale != bindcol->column_scale;
 		break;
 		/* TODO intervals */
 	}
@@ -486,10 +473,9 @@ _tdsodbc_dbconvert(TDS_DBC *dbc, int srctype, const TDS_CHAR * src, SQLLEN src_l
 	/* oft times we are asked to convert a data type to itself */
 	if ((srctype == desttype || is_similar_type(srctype, desttype)) && !always_convert) {
 		if (is_char_type(desttype)) {
-			ret = _bcp_iconv_helper(dbc, bindcol, src, src_len, (char *)dest, destlen);
-		}
-		else {
-			ret = destlen < src_len ? destlen : src_len;
+			ret = (TDS_INT) _bcp_iconv_helper (dbc, bindcol, src, src_len, (char *)dest, destlen);
+		} else {
+			ret = destlen < src_len ? destlen : (TDS_INT) src_len;
 			memcpy(dest, src, ret);
 		}
 		return ret;
@@ -513,7 +499,7 @@ _tdsodbc_dbconvert(TDS_DBC *dbc, int srctype, const TDS_CHAR * src, SQLLEN src_l
 	case SYBBINARY:
 	case SYBVARBINARY:
 	case SYBIMAGE:
-		ret = destlen < len ? destlen : len;
+		ret = TDS_MIN(destlen, len);
 		memcpy(dest, dres.ib, ret);
 		free(dres.ib);
 		break;
@@ -542,7 +528,7 @@ _tdsodbc_dbconvert(TDS_DBC *dbc, int srctype, const TDS_CHAR * src, SQLLEN src_l
 	case SYBCHAR:
 	case SYBVARCHAR:
 	case SYBTEXT:
-		ret = _bcp_iconv_helper(dbc, bindcol, dres.c, len, (char *)dest, destlen);
+		ret = (TDS_INT) _bcp_iconv_helper(dbc, bindcol, dres.c, len, (char *) dest, destlen);
 		free(dres.c);
 		break;
 	default:
@@ -633,7 +619,7 @@ _bcp_get_col_data(TDSBCPINFO *bcpinfo, TDSCOLUMN *bindcol, int offset TDS_UNUSED
 		bytes_read = _bcp_get_term_var(dataptr, bindcol->bcp_terminator, bindcol->bcp_term_len);
 
 		if (col_len != SQL_NULL_DATA)
-			col_len = (bytes_read < col_len) ? bytes_read : col_len;
+			col_len = TDS_MIN(bytes_read, col_len);
 		else
 			col_len = bytes_read;
 	}

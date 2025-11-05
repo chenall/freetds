@@ -8,7 +8,7 @@ static void
 TestInsert(char *buf)
 {
 	SQLLEN ind;
-	int l = strlen(buf);
+	int l = (int) strlen(buf);
 	char sql[200];
 
 	/* insert some data and test success */
@@ -63,8 +63,7 @@ Test(int prebind)
 	ODBC_FREE();
 }
 
-int
-main(void)
+TEST_MAIN()
 {
 	odbc_connect();
 

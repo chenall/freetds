@@ -55,10 +55,6 @@
 #define HOST_COL_CONV_ERROR 1
 #define HOST_COL_NULL_ERROR 2
 
-#ifndef MAX
-#define MAX(a,b) ( (a) > (b) ? (a) : (b) )
-#endif
-
 #ifdef HAVE_FSEEKO
 typedef off_t offset_type;
 #elif defined(_WIN32) || defined(_WIN64)
@@ -207,7 +203,7 @@ bcp_init(DBPROCESS * dbproc, const char *tblname, const char *hfile, const char 
 
 	dbproc->bcpinfo->direction = direction;
 
-	dbproc->bcpinfo->xfer_init  = 0;
+	dbproc->bcpinfo->xfer_init = false;
 	dbproc->bcpinfo->bind_count = 0;
 
 	if (TDS_FAILED(tds_bcp_init(dbproc->tds_socket, dbproc->bcpinfo))) {
@@ -955,7 +951,7 @@ _bcp_exec_out(DBPROCESS * dbproc, DBINT * rows_copied)
 
 		/* skip rows outside of the firstrow/lastrow range, if specified */
 		if (dbproc->hostfileinfo->firstrow > row_of_query ||
-						      row_of_query > MAX(dbproc->hostfileinfo->lastrow, 0x7FFFFFFF))
+						      row_of_query > TDS_MAX(dbproc->hostfileinfo->lastrow, 0x7FFFFFFF))
 			continue;
 
 		/* Go through the hostfile columns, finding those that relate to database columns. */
@@ -982,7 +978,7 @@ _bcp_exec_out(DBPROCESS * dbproc, DBINT * rows_copied)
 
 			/* The data */
 			if (hostcol->column_len != -1) {
-				buflen = buflen > hostcol->column_len ? hostcol->column_len : buflen;
+				buflen = TDS_MIN(buflen, hostcol->column_len);
 			}
 
 			if (buflen > 0) {
@@ -1230,7 +1226,7 @@ _bcp_read_hostfile(DBPROCESS * dbproc, FILE * hostfile, bool *row_error, bool sk
 			if (hostcol->column_len == 0)
 				data_is_null = true;
 			else if (collen)
-				collen = (hostcol->column_len < collen) ? hostcol->column_len : collen;
+				collen = TDS_MIN(hostcol->column_len, collen);
 			else
 				collen = hostcol->column_len;
 		}
@@ -1405,7 +1401,7 @@ bcp_sendrow(DBPROCESS * dbproc)
 	 * The first time sendrow is called after bcp_init,
 	 * there is a certain amount of initialisation to be done.
 	 */
-	if (dbproc->bcpinfo->xfer_init == 0) {
+	if (!dbproc->bcpinfo->xfer_init) {
 
 		/* The start_copy function retrieves details of the table's columns */
 		if (TDS_FAILED(tds_bcp_start_copy_in(tds, dbproc->bcpinfo))) {
@@ -1413,7 +1409,7 @@ bcp_sendrow(DBPROCESS * dbproc)
 			return FAIL;
 		}
 
-		dbproc->bcpinfo->xfer_init = 1;
+		dbproc->bcpinfo->xfer_init = true;
 
 	}
 
@@ -1478,7 +1474,7 @@ _bcp_exec_in(DBPROCESS * dbproc, DBINT * rows_copied)
 
 		row_of_hostfile++;
 
-		if (row_of_hostfile > MAX(dbproc->hostfileinfo->lastrow, 0x7FFFFFFF))
+		if (row_of_hostfile > TDS_MAX(dbproc->hostfileinfo->lastrow, 0x7FFFFFFF))
 			break;
 
 		skip = dbproc->hostfileinfo->firstrow > row_of_hostfile;
@@ -1527,7 +1523,7 @@ _bcp_exec_in(DBPROCESS * dbproc, DBINT * rows_copied)
 				fseeko(hostfile, row_start, SEEK_SET);
 
 				while (error_row_size > 0) {
-					size_t chunk = error_row_size > chunk_size ? chunk_size : (size_t) error_row_size;
+					size_t chunk = TDS_MIN((size_t) error_row_size, chunk_size);
 
 					if (!row_in_error) {
 						if ((row_in_error = tds_new(char, chunk)) == NULL) {
@@ -2231,7 +2227,7 @@ _bcp_get_col_data(TDSBCPINFO *bcpinfo, TDSCOLUMN *bindcol, int offset TDS_UNUSED
 		if (bindcol->column_bindlen == 0)
 			goto null_data;
 		if (collen)
-			collen = (bindcol->column_bindlen < collen) ? bindcol->column_bindlen : collen;
+			collen = TDS_MIN(bindcol->column_bindlen, collen);
 		else
 			collen = bindcol->column_bindlen;
 	}

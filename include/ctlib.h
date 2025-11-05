@@ -149,9 +149,10 @@ struct _cs_context
 	/* code changes ends here - CT_DIAG - 02 */
 
 	struct cs_diag_msg *msgstore;
-	CS_CSLIBMSG_FUNC _cslibmsg_cb;
-	CS_CLIENTMSG_FUNC _clientmsg_cb;
-	CS_SERVERMSG_FUNC _servermsg_cb;
+	CS_CSLIBMSG_FUNC cslibmsg_cb;
+	CS_CLIENTMSG_FUNC clientmsg_cb;
+	CS_SERVERMSG_FUNC servermsg_cb;
+	CS_INTERRUPT_FUNC interrupt_cb;
 	/* code changes start here - CS_CONFIG - 01*/
 	void *userdata;
 	int userdata_len;
@@ -188,8 +189,9 @@ struct _cs_connection
 	CS_CONTEXT *ctx;
 	TDSLOGIN *tds_login;
 	TDSSOCKET *tds_socket;
-	CS_CLIENTMSG_FUNC _clientmsg_cb;
-	CS_SERVERMSG_FUNC _servermsg_cb;
+	CS_CLIENTMSG_FUNC clientmsg_cb;
+	CS_SERVERMSG_FUNC servermsg_cb;
+	CS_INTERRUPT_FUNC interrupt_cb;
 	void *userdata;
 	int userdata_len;
 	CS_LOCALE *locale;
@@ -324,9 +326,9 @@ struct _cs_locale
 
 /* internal defines for cursor processing */
 
-#define _CS_CURS_TYPE_UNACTIONED 0
-#define _CS_CURS_TYPE_REQUESTED  1
-#define _CS_CURS_TYPE_SENT       2
+#define _CS_CURS_TYPE_UNACTIONED TDS_CURSOR_STATE_UNACTIONED
+#define _CS_CURS_TYPE_REQUESTED  TDS_CURSOR_STATE_REQUESTED
+#define _CS_CURS_TYPE_SENT       TDS_CURSOR_STATE_SENT
 
 typedef struct {
 	CS_CHAR name[132];
@@ -375,11 +377,16 @@ typedef union
 	CS_DATAFMT user;
 } CS_DATAFMT_INTERNAL;
 
+#if ENABLE_EXTRA_CHECKS
+#define CS_QUERY_HAS_FOR_UPDATE 9500
+#endif
+
 /*
  * internal prototypes
  */
 TDSRET _ct_handle_server_message(const TDSCONTEXT * ctxptr, TDSSOCKET * tdsptr, TDSMESSAGE * msgptr);
 int _ct_handle_client_message(const TDSCONTEXT * ctxptr, TDSSOCKET * tdsptr, TDSMESSAGE * msgptr);
+int _ct_handle_interrupt(void * ptr);
 TDS_SERVER_TYPE _ct_get_server_type(TDSSOCKET *tds, int datatype);
 int _ct_bind_data(CS_CONTEXT *ctx, TDSRESULTINFO * resinfo, TDSRESULTINFO *bindinfo, CS_INT offset);
 int _ct_get_client_type(const TDSCOLUMN *col, bool describe);
@@ -395,7 +402,7 @@ CS_INT _ct_get_string_length(const char *buf, CS_INT buflen);
 int _cs_convert_not_client(CS_CONTEXT *ctx, const TDSCOLUMN *curcol, CONV_RESULT *convert_buffer, unsigned char **p_src);
 
 CS_RETCODE _cs_convert(CS_CONTEXT * ctx, const CS_DATAFMT_COMMON * srcfmt, CS_VOID * srcdata,
-	const CS_DATAFMT_COMMON * destfmt, CS_VOID * destdata, CS_INT * resultlen);
+	const CS_DATAFMT_COMMON * destfmt, CS_VOID * destdata, CS_INT * resultlen, TDS_SERVER_TYPE desttype);
 bool _ct_is_large_identifiers_version(CS_INT version);
 const CS_DATAFMT_COMMON * _ct_datafmt_common(CS_CONTEXT * ctx, const CS_DATAFMT * datafmt);
 const CS_DATAFMT_LARGE *_ct_datafmt_conv_in(CS_CONTEXT * ctx, const CS_DATAFMT * datafmt, CS_DATAFMT_LARGE * fmtbuf);

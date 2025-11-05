@@ -56,6 +56,7 @@ static int _ct_fill_param(CS_INT cmd_type, CS_PARAM * param, const CS_DATAFMT_LA
 static void _ct_initialise_cmd(CS_COMMAND *cmd);
 static CS_RETCODE _ct_cancel_cleanup(CS_COMMAND * cmd);
 static CS_INT _ct_map_compute_op(CS_INT comp_op);
+static bool query_has_for_update(const char *query);
 
 /* Added for CT_DIAG */
 /* Code changes starts here - CT_DIAG - 01 */
@@ -151,8 +152,20 @@ _ct_get_user_api_layer_error(int error)
 	case 6:
 		return "The parameter %1! cannot be NULL.";
 		break;
+	case 8:
+		return "The %1! parameter must be NULL.";
+		break;
+	case 9:
+		return "The %1! parameter must be set to CS_UNUSED.";
+		break;
 	case 15:
 		return "Use direction CS_BLK_IN or CS_BLK_OUT for a bulk copy operation.";
+		break;
+	case 18:
+		return "A cursor must be declared before this command type can be initialized.";
+		break;
+	case 29:
+		return "This type of command cannot be batched with the command already initialized on the command structure.";
 		break;
 	case 51:
 		return "Exactly one of context and connection must be non-NULL.";
@@ -178,6 +191,9 @@ _ct_get_user_api_layer_error(int error)
 		break;
 	case 155:
 		return "This routine cannot be called when the command structure is idle.";
+		break;
+	case 171:
+		return "A cursor must be opened before this command type can be initialized.";
 		break;
 	default:
 		break;
@@ -217,10 +233,10 @@ _ctclient_msg(CS_CONTEXT *ctx, CS_CONNECTION * con, const char *funcname,
 
 	if (con) {
 		ctx = con->ctx;
-		clientmsg_cb = con->_clientmsg_cb;
+		clientmsg_cb = con->clientmsg_cb;
 	}
 	if (!clientmsg_cb)
-		clientmsg_cb = ctx->_clientmsg_cb;
+		clientmsg_cb = ctx->clientmsg_cb;
 
 	va_start(ap, fmt);
 
@@ -357,11 +373,19 @@ ct_callback(CS_CONTEXT * ctx, CS_CONNECTION * con, CS_INT action, CS_INT type, C
 
 		switch (type) {
 		case CS_CLIENTMSG_CB:
-			out_func = (CS_VOID *) (con ? con->_clientmsg_cb : ctx->_clientmsg_cb);
+			out_func = (CS_VOID *) (con ? con->clientmsg_cb : ctx->clientmsg_cb);
 			break;
 		case CS_SERVERMSG_CB:
-			out_func = (CS_VOID *) (con ? con->_servermsg_cb : ctx->_servermsg_cb);
+			out_func = (CS_VOID *) (con ? con->servermsg_cb : ctx->servermsg_cb);
 			break;
+		case CS_INTERRUPT_CB:
+			out_func = (CS_VOID *) (con ? con->interrupt_cb : ctx->interrupt_cb);
+			break;
+#if ENABLE_EXTRA_CHECKS
+		case CS_QUERY_HAS_FOR_UPDATE:
+			out_func = (CS_VOID *) query_has_for_update;
+			break;
+#endif
 		default:
 			_ctclient_msg(ctx, con, "ct_callback()", 1, 1, 1, 5, "%d, %s", type, "type");
 			return CS_FAIL;
@@ -379,15 +403,27 @@ ct_callback(CS_CONTEXT * ctx, CS_CONNECTION * con, CS_INT action, CS_INT type, C
 	switch (type) {
 	case CS_CLIENTMSG_CB:
 		if (con)
-			con->_clientmsg_cb = (CS_CLIENTMSG_FUNC) funcptr;
+			con->clientmsg_cb = (CS_CLIENTMSG_FUNC) funcptr;
 		else
-			ctx->_clientmsg_cb = (CS_CLIENTMSG_FUNC) funcptr;
+			ctx->clientmsg_cb = (CS_CLIENTMSG_FUNC) funcptr;
 		break;
 	case CS_SERVERMSG_CB:
 		if (con)
-			con->_servermsg_cb = (CS_SERVERMSG_FUNC) funcptr;
+			con->servermsg_cb = (CS_SERVERMSG_FUNC) funcptr;
 		else
-			ctx->_servermsg_cb = (CS_SERVERMSG_FUNC) funcptr;
+			ctx->servermsg_cb = (CS_SERVERMSG_FUNC) funcptr;
+		break;
+	case CS_INTERRUPT_CB:
+		if (funcptr) {
+			if (con)
+				ctx = con->ctx;
+			/* install shim on demand */
+			ctx->tds_ctx->int_handler = _ct_handle_interrupt;
+		}
+		if (con)
+			con->interrupt_cb = (CS_INTERRUPT_FUNC) funcptr;
+		else
+			ctx->interrupt_cb = (CS_INTERRUPT_FUNC) funcptr;
 		break;
 	default:
 		_ctclient_msg(ctx, con, "ct_callback()", 1, 1, 1, 5, "%d, %s", type, "type");
@@ -611,7 +647,7 @@ ct_con_props(CS_CONNECTION * con, CS_INT action, CS_INT property, CS_VOID * buff
 			s = &tds_login->database;
 		str_copy:
 			if (out_len)
-				*out_len = tds_dstr_len(s);
+				*out_len = (CS_INT) tds_dstr_len(s);
 			strlcpy((char *) buffer, tds_dstr_cstr(s), buflen);
 			break;
 		case CS_PRODUCT_NAME:
@@ -859,7 +895,7 @@ ct_cmd_alloc(CS_CONNECTION * con, CS_COMMAND ** pcmd)
 CS_RETCODE
 ct_command(CS_COMMAND * cmd, CS_INT type, const CS_VOID * buffer, CS_INT buflen, CS_INT option)
 {
-	int query_len, current_query_len;
+	ptrdiff_t query_len, current_query_len;
 
 	tdsdump_log(TDS_DBG_FUNC, "ct_command(%p, %d, %p, %d, %d)\n", cmd, type, buffer, buflen, option);
 
@@ -1970,7 +2006,7 @@ _ct_bind_data(CS_CONTEXT *ctx, TDSRESULTINFO * resinfo, TDSRESULTINFO *bindinfo,
 		destfmt.format = bindcol->column_bindfmt;
 
 		/* if convert return FAIL mark error but process other columns */
-		ret = _cs_convert(ctx, &srcfmt, src, &destfmt, dest, pdatalen);
+		ret = _cs_convert(ctx, &srcfmt, src, &destfmt, dest, pdatalen, TDS_INVALID_TYPE);
 		if (ret != CS_SUCCEED) {
 			tdsdump_log(TDS_DBG_FUNC, "cs_convert-result = %d\n", ret);
 			result = 1;
@@ -2020,6 +2056,7 @@ ct_cmd_drop(CS_COMMAND * cmd)
 			cmd->next = NULL;
 		}
 
+		tds_release_cursor(&cmd->cursor);
 		free(cmd);
 	}
 	return CS_SUCCEED;
@@ -2179,6 +2216,38 @@ _ct_get_client_type(const TDSCOLUMN *col, bool describe)
 	case SYBMSTIME:
 	case SYBMSDATETIME2:
 	case SYBMSDATETIMEOFFSET:
+		break;
+
+	/* nullable types should not occur here... */
+	case SYBBITN:
+	case SYBINTN:
+	case SYBDATETIMN:
+	case SYBFLTN:
+	case SYBMONEYN:
+	case SYBUINTN:
+	case SYBTIMEN:
+	case SYBDATEN:
+
+	/* handled by tds_get_conversion_type */
+	case SYB5INT8:
+		assert(0);
+
+	/* TODO... */
+	case SYBVOID:
+	case SYBNVARCHAR:
+	case XSYBVARCHAR:
+	case XSYBNVARCHAR:
+	case XSYBNCHAR:
+	case XSYBVARBINARY:
+	case XSYBBINARY:
+	case SYBMSUDT:
+	case SYBMSXML:
+	case SYBMSTABLE:
+	case SYBINTERVAL:
+	case SYBSINT1:
+	case SYBUNITEXT:
+	case SYBXML:
+	case SYBNTEXT:
 		break;
 	}
 
@@ -2512,7 +2581,7 @@ ct_describe(CS_COMMAND * cmd, CS_INT item, CS_DATAFMT * datafmt_arg)
 	curcol = resinfo->columns[item - 1];
 	/* name is always null terminated */
 	strlcpy(datafmt->name, tds_dstr_cstr(&curcol->column_name), sizeof(datafmt->name));
-	datafmt->namelen = strlen(datafmt->name);
+	datafmt->namelen = (CS_INT) strlen(datafmt->name);
 	/* need to turn the SYBxxx into a CS_xxx_TYPE */
 	datafmt->datatype = _ct_get_client_type(curcol, true);
 	if (datafmt->datatype == CS_ILLEGAL_TYPE) {
@@ -2666,7 +2735,7 @@ ct_config(CS_CONTEXT * ctx, CS_INT action, CS_INT property, CS_VOID * buffer, CS
 					);
 					((char*)buffer)[buflen - 1]= 0;
 					if (*outlen < 0)
-						*outlen = strlen((char*) buffer);
+						*outlen = (CS_INT) strlen((char*) buffer);
 					ret = CS_SUCCEED;
 				}
 				break;
@@ -2686,7 +2755,7 @@ ct_config(CS_CONTEXT * ctx, CS_INT action, CS_INT property, CS_VOID * buffer, CS
 					*outlen= snprintf((char*) buffer, buflen, "%s", settings->freetds_version);
 					((char*)buffer)[buflen - 1]= 0;
 					if (*outlen < 0)
-						*outlen = strlen((char*) buffer);
+						*outlen = (CS_INT) strlen((char*) buffer);
 					ret = CS_SUCCEED;
 				}
 				break;
@@ -2778,6 +2847,11 @@ ct_cmd_props(CS_COMMAND * cmd, CS_INT action, CS_INT property, CS_VOID * buffer,
 		case CS_CUR_NAME:
 		case CS_CUR_ROWCOUNT:
 
+			if (property == CS_CUR_STATUS && buflen != CS_UNUSED) {
+				_ctclient_msg(NULL, cmd->con, "ct_cmd_props(GET,CUR_STATUS)", 1, 1, 1, 9, "%s", "buflen");
+				return CS_FAIL;
+			}
+
 			cursor = cmd->cursor;
 
 			if (!cursor) {
@@ -2800,8 +2874,8 @@ ct_cmd_props(CS_COMMAND * cmd, CS_INT action, CS_INT property, CS_VOID * buffer,
 				if (outlen) *outlen = sizeof(CS_INT);
 			}
 			if (property == CS_CUR_NAME) {
-				size_t len = strlen(cursor->cursor_name);
-				if ((CS_INT) len >= buflen)
+				CS_INT len = (CS_INT) strlen(cursor->cursor_name);
+				if (len >= buflen)
 					return CS_FAIL;
 				strcpy((char*) buffer, cursor->cursor_name);
 				if (outlen) *outlen = len;
@@ -2945,7 +3019,7 @@ ct_get_data(CS_COMMAND * cmd, CS_INT item, CS_VOID * buffer, CS_INT buflen, CS_I
 
 	if (item != cmd->get_data_item) {
 		TDSBLOB *blob = NULL;
-		size_t table_namelen, column_namelen;
+		size_t table_namelen, column_namelen, namelen;
 
 		/* allocate needed descriptor if needed */
 		free(cmd->iodesc);
@@ -2979,17 +3053,26 @@ ct_get_data(CS_COMMAND * cmd, CS_INT item, CS_VOID * buffer, CS_INT buflen, CS_I
 		/* TODO quote needed ?? */
 		/* avoid possible buffer overflow */
 		table_namelen = tds_dstr_len(&curcol->table_name);
-		if (table_namelen + 2 > sizeof(cmd->iodesc->name))
-			table_namelen = sizeof(cmd->iodesc->name) - 2;
+		table_namelen = TDS_MIN(table_namelen, sizeof(cmd->iodesc->name) - 2);
 		column_namelen = tds_dstr_len(&curcol->column_name);
-		if (table_namelen + column_namelen + 2 > sizeof(cmd->iodesc->name))
-			column_namelen = sizeof(cmd->iodesc->name) - 2 - table_namelen;
+		column_namelen = TDS_MIN(column_namelen, sizeof(cmd->iodesc->name) - 2 - table_namelen);
 
-		sprintf(cmd->iodesc->name, "%*.*s.%*.*s",
-			(int) table_namelen, (int) table_namelen, tds_dstr_cstr(&curcol->table_name),
-			(int) column_namelen, (int) column_namelen, tds_dstr_cstr(&curcol->column_name));
+		namelen = 0;
+		if (table_namelen) {
+			memcpy(cmd->iodesc->name, tds_dstr_cstr(&curcol->table_name), table_namelen);
+			namelen += table_namelen;
+		}
 
-		cmd->iodesc->namelen = strlen(cmd->iodesc->name);
+		cmd->iodesc->name[namelen] = '.';
+		++namelen;
+
+		if (column_namelen) {
+			memcpy(cmd->iodesc->name + namelen, tds_dstr_cstr(&curcol->column_name), column_namelen);
+			namelen += column_namelen;
+		}
+
+		cmd->iodesc->name[namelen] = '\0';
+		cmd->iodesc->namelen = (CS_INT) namelen;
 
 		if (blob && blob->valid_ptr) {
 			memcpy(cmd->iodesc->timestamp, blob->timestamp, CS_TS_SIZE);
@@ -3356,7 +3439,7 @@ ct_capability(CS_CONNECTION * con, CS_INT action, CS_INT type, CS_INT capability
 CS_RETCODE
 ct_dynamic(CS_COMMAND * cmd, CS_INT type, CS_CHAR * id, CS_INT idlen, CS_CHAR * buffer, CS_INT buflen)
 {
-	int query_len;
+	ptrdiff_t query_len;
 	CS_CONNECTION *con;
 	CS_DYNAMIC *dyn;
 
@@ -3944,11 +4027,96 @@ ct_poll(CS_CONTEXT * ctx, CS_CONNECTION * connection, CS_INT milliseconds, CS_CO
 	return CS_FAIL;
 }
 
+static CS_RETCODE
+_ct_cursor_no_name_text(CS_COMMAND * cmd, const char *funcname, CS_CHAR * name, CS_INT namelen, CS_CHAR * text, CS_INT tlen)
+{
+	if (name != NULL) {
+		_ctclient_msg(NULL, cmd->con, funcname, 1, 1, 1, 8, "%s", "name");
+		return CS_FAIL;
+	}
+	if (namelen != CS_UNUSED) {
+		_ctclient_msg(NULL, cmd->con, funcname, 1, 1, 1, 9, "%s", "namelen");
+		return CS_FAIL;
+	}
+	if (text != NULL) {
+		_ctclient_msg(NULL, cmd->con, funcname, 1, 1, 1, 8, "%s", "text");
+		return CS_FAIL;
+	}
+	if (tlen != CS_UNUSED) {
+		_ctclient_msg(NULL, cmd->con, funcname, 1, 1, 1, 9, "%s", "tlen");
+		return CS_FAIL;
+	}
+	return CS_SUCCEED;
+}
+
+static const char*
+get_next_tok(const char* str, size_t *tok_len)
+{
+	static const char delimiter[] = "\n\t,.[]() /-";
+
+	while (*str) {
+		switch (str[0]) {
+		/* handle quoted strings/identifiers */
+		case '\'':
+		case '\"':
+		case '[':
+			*tok_len = tds_skip_quoted(str) - str;
+			return str;
+		/* skip comments */
+		case '-':
+		case '/':
+			str = tds_skip_comment(str);
+			continue;
+		/* skip delimiters */
+		case '\n':
+		case '\t':
+		case ' ':
+		case ',':
+		case '.':
+		case '(':
+		case ')':
+			++str;
+			continue;
+		}
+
+		if ((*tok_len = strcspn(str, delimiter)) == 0)
+			return NULL;
+		return str;
+	}
+	return NULL;
+}
+
+static bool
+query_has_for_update(const char *query)
+{
+	enum {
+		tok_baseline,
+		tok_for,
+	} state = tok_baseline;
+	size_t tok_len;
+
+	const char* tok = get_next_tok(query, &tok_len);
+	while (tok != NULL) {
+		if (tok_len == 3 && strncasecmp(tok, "FOR", 3) == 0) {
+			state = tok_for;
+		} else if (state == tok_for && tok_len == 6 && strncasecmp(tok, "UPDATE", 6) == 0) {
+			return true;
+		} else {
+			state = tok_baseline;
+		}
+
+		tok = get_next_tok(tok + tok_len, &tok_len);
+	}
+	return false;
+}
+
 CS_RETCODE
 ct_cursor(CS_COMMAND * cmd, CS_INT type, CS_CHAR * name, CS_INT namelen, CS_CHAR * text, CS_INT tlen, CS_INT option)
 {
 	TDSSOCKET *tds;
 	TDSCURSOR *cursor;
+	const char *funcname;
+	CS_RETCODE ret;
 
 	tdsdump_log(TDS_DBG_FUNC, "ct_cursor(%p, %d, %p, %d, %p, %d, %d)\n", cmd, type, name, namelen, text, tlen, option);
 
@@ -3963,17 +4131,18 @@ ct_cursor(CS_COMMAND * cmd, CS_INT type, CS_CHAR * name, CS_INT namelen, CS_CHAR
 	switch (type) {
 	case CS_CURSOR_DECLARE:
 
+		funcname = "ct_cursor(DECLARE)";
 		namelen = _ct_get_string_length(name, namelen);
 		if (namelen < 0) {
-			_ctclient_msg(NULL, cmd->con, "ct_cursor(DECLARE)", 1, 1, 1, 5, "%d, %s", namelen, "namelen");
+			_ctclient_msg(NULL, cmd->con, funcname, 1, 1, 1, 5, "%d, %s", namelen, "namelen");
 			return CS_FAIL;
 		}
 		tlen = _ct_get_string_length(text, tlen);
 		if (tlen < 0) {
-			_ctclient_msg(NULL, cmd->con, "ct_cursor(DECLARE)", 1, 1, 1, 5, "%d, %s", tlen, "tlen");
+			_ctclient_msg(NULL, cmd->con, funcname, 1, 1, 1, 5, "%d, %s", tlen, "tlen");
 			return CS_FAIL;
 		}
-		cursor = tds_alloc_cursor(tds, name, namelen, text, tlen);
+		cursor = tds_alloc_cursor(tds, name, (CS_UINT) namelen, text, (CS_UINT) tlen);
 		if (!cursor)
 			return CS_FAIL;
 
@@ -3986,6 +4155,26 @@ ct_cursor(CS_COMMAND * cmd, CS_INT type, CS_CHAR * name, CS_INT namelen, CS_CHAR
 		cursor->status.close      = TDS_CURSOR_STATE_UNACTIONED;
 		cursor->status.dealloc    = TDS_CURSOR_STATE_UNACTIONED;
 
+		if (option == CS_UNUSED || (option & CS_END) != 0) {
+			/* Try to figure out type of the cursor. */
+			if (query_has_for_update(cursor->query)) {
+				cursor->type = TDS_CUR_TYPE_FORWARD; /* Forward-only cursor. */
+			} else {
+				/* readonly */
+				cursor->type = TDS_CUR_TYPE_KEYSET;
+				/* Keyset-driven cursor. Default value. */
+			}
+		} else if ((option & CS_FOR_UPDATE) != 0) {
+			cursor->type = TDS_CUR_TYPE_FORWARD; /* Forward-only cursor. */
+		} else {
+			cursor->type = TDS_CUR_TYPE_KEYSET;
+			/* Keyset-driven cursor. Default value. */
+		}
+
+		cursor->concurrency =
+			TDS_CUR_CONCUR_ALLOW_DIRECT | TDS_CUR_CONCUR_OPTIMISTIC;
+		/* Optimistic.	Checks timestamps if available, else values. */
+
 		tds_release_cursor(&cmd->cursor);
 		cmd->cursor = cursor;
 		ct_set_command_state(cmd, _CS_COMMAND_READY);
@@ -3994,9 +4183,15 @@ ct_cursor(CS_COMMAND * cmd, CS_INT type, CS_CHAR * name, CS_INT namelen, CS_CHAR
 
 	case CS_CURSOR_ROWS:
 
+		funcname = "ct_cursor(ROWS)";
+
+		ret = _ct_cursor_no_name_text(cmd, funcname, name, namelen, text, tlen);
+		if (ret != CS_SUCCEED)
+			return ret;
+
 		cursor = cmd->cursor;
 		if (!cursor) {
-			tdsdump_log(TDS_DBG_FUNC, "ct_cursor() : cursor not present\n");
+			_ctclient_msg(NULL, cmd->con, funcname, 1, 1, 1, 18, "");
 			return CS_FAIL;
 		}
 
@@ -4008,8 +4203,7 @@ ct_cursor(CS_COMMAND * cmd, CS_INT type, CS_CHAR * name, CS_INT namelen, CS_CHAR
 
 			ct_set_command_state(cmd, _CS_COMMAND_READY);
 			return CS_SUCCEED;
-		}
-		else {
+		} else {
 			cursor->status.cursor_row  = TDS_CURSOR_STATE_UNACTIONED;
 			tdsdump_log(TDS_DBG_FUNC, "ct_cursor() : cursor not declared\n");
 			return CS_FAIL;
@@ -4018,9 +4212,15 @@ ct_cursor(CS_COMMAND * cmd, CS_INT type, CS_CHAR * name, CS_INT namelen, CS_CHAR
 
 	case CS_CURSOR_OPEN:
 
+		funcname = "ct_cursor(OPEN)";
+
+		ret = _ct_cursor_no_name_text(cmd, funcname, name, namelen, text, tlen);
+		if (ret != CS_SUCCEED)
+			return ret;
+
 		cursor = cmd->cursor;
 		if (!cursor) {
-			tdsdump_log(TDS_DBG_FUNC, "ct_cursor() : cursor not present\n");
+			_ctclient_msg(NULL, cmd->con, funcname, 1, 1, 1, 18, "");
 			return CS_FAIL;
 		}
 
@@ -4031,8 +4231,7 @@ ct_cursor(CS_COMMAND * cmd, CS_INT type, CS_CHAR * name, CS_INT namelen, CS_CHAR
 
 			return CS_SUCCEED;
 			ct_set_command_state(cmd, _CS_COMMAND_READY);
-		}
-		else {
+		} else {
 			cursor->status.open = TDS_CURSOR_STATE_UNACTIONED;
 			tdsdump_log(TDS_DBG_FUNC, "ct_cursor() : cursor not declared\n");
 			return CS_FAIL;
@@ -4042,9 +4241,15 @@ ct_cursor(CS_COMMAND * cmd, CS_INT type, CS_CHAR * name, CS_INT namelen, CS_CHAR
 
 	case CS_CURSOR_CLOSE:
 
+		funcname = "ct_cursor(CLOSE)";
+
+		ret = _ct_cursor_no_name_text(cmd, funcname, name, namelen, text, tlen);
+		if (ret != CS_SUCCEED)
+			return ret;
+
 		cursor = cmd->cursor;
 		if (!cursor) {
-			tdsdump_log(TDS_DBG_FUNC, "ct_cursor() : cursor not present\n");
+			_ctclient_msg(NULL, cmd->con, funcname, 1, 1, 1, 171, "");
 			return CS_FAIL;
 		}
 
@@ -4060,9 +4265,15 @@ ct_cursor(CS_COMMAND * cmd, CS_INT type, CS_CHAR * name, CS_INT namelen, CS_CHAR
 
 	case CS_CURSOR_DEALLOC:
 
+		funcname = "ct_cursor(DEALLOC)";
+
+		ret = _ct_cursor_no_name_text(cmd, funcname, name, namelen, text, tlen);
+		if (ret != CS_SUCCEED)
+			return ret;
+
 		cursor = cmd->cursor;
 		if (!cursor) {
-			tdsdump_log(TDS_DBG_FUNC, "ct_cursor() : cursor not present\n");
+			_ctclient_msg(NULL, cmd->con, funcname, 1, 1, 1, 18, "");
 			return CS_FAIL;
 		}
 		cursor->status.dealloc   = TDS_CURSOR_STATE_REQUESTED;
@@ -4493,8 +4704,8 @@ ct_diag(CS_CONNECTION * conn, CS_INT operation, CS_INT type, CS_INT idx, CS_VOID
 		if (conn->ctx->cs_diag_msglimit_total == 0)
 			conn->ctx->cs_diag_msglimit_total = CS_NO_LIMIT;
 
-		conn->ctx->_clientmsg_cb = (CS_CLIENTMSG_FUNC) ct_diag_storeclientmsg;
-		conn->ctx->_servermsg_cb = (CS_SERVERMSG_FUNC) ct_diag_storeservermsg;
+		conn->ctx->clientmsg_cb = (CS_CLIENTMSG_FUNC) ct_diag_storeclientmsg;
+		conn->ctx->servermsg_cb = (CS_SERVERMSG_FUNC) ct_diag_storeservermsg;
 
 		break;
 

@@ -33,7 +33,7 @@ static int
 mycmp(const char *s1, const char *s2)
 {
 	SQLWCHAR buf[128], *wp;
-	unsigned l;
+	size_t l;
 
 	if (type == SQL_C_CHAR)
 		return strcmp(s1, s2);
@@ -131,8 +131,7 @@ test_split(const char *n_flag)
 	odbc_reset_statement();
 }
 
-int
-main(void)
+TEST_MAIN()
 {
 	char buf[32];
 	SQLINTEGER int_buf;
@@ -247,7 +246,7 @@ main(void)
 
 	odbc_disconnect();
 
-	odbc_use_version3 = 1;
+	odbc_use_version3 = true;
 	odbc_connect();
 
 	/* test error from SQLGetData */

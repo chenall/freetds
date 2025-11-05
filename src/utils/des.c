@@ -260,7 +260,7 @@ static const char pbox[32] = {
 /* Lookup tables initialized once only at startup by des_init() */
 
 /* bit 0 is left-most in byte */
-static const int bytebit[] = {
+static const uint8_t bytebit[] = {
 	0200, 0100, 040, 020, 010, 04, 02, 01
 };
 
@@ -623,9 +623,9 @@ spinit(DES_KEY * key)
 /* ECB MODE */
 
 int
-tds_des_ecb_encrypt(const void *plaintext, int len, DES_KEY * akey, unsigned char *output)
+tds_des_ecb_encrypt(const void *plaintext, size_t len, DES_KEY * akey, unsigned char *output)
 {
-	int j;
+	size_t j;
 	const unsigned char *plain = (const unsigned char *) plaintext;
 
 	for (j = 0; j < len / 8; j++) {

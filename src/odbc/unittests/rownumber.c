@@ -60,10 +60,9 @@ DoTest()
 	ODBC_CHECK_ROWS(-1);
 }
 
-int
-main(void)
+TEST_MAIN()
 {
-	odbc_use_version3 = 1;
+	odbc_use_version3 = true;
 
 	odbc_connect();
 

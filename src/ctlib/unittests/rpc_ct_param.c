@@ -1,7 +1,6 @@
 #include "common.h"
 
-#define MAX(X,Y)      (((X) > (Y)) ? (X) : (Y))
-#define MIN(X,Y)      (((X) < (Y)) ? (X) : (Y))
+#include <freetds/macros.h>
 
 static CS_INT ex_display_dlen(CS_DATAFMT * column);
 static CS_RETCODE ex_display_header(CS_INT numcols, CS_DATAFMT columns[]);
@@ -15,8 +14,7 @@ typedef struct _ex_column_data
 EX_COLUMN_DATA;
 
 /* Testing: array binding of result set */
-int
-main(void)
+TEST_MAIN()
 {
 	CS_CONTEXT *ctx;
 	CS_CONNECTION *conn;
@@ -60,7 +58,7 @@ main(void)
 	error_to_stdout = true;
 
 	/* do not test error */
-	ret = run_command(cmd, "IF OBJECT_ID('sample_rpc') IS NOT NULL DROP PROCEDURE sample_rpc");
+	run_command(cmd, "IF OBJECT_ID('sample_rpc') IS NOT NULL DROP PROCEDURE sample_rpc");
 
 	strcpy(cmdbuf, "create proc sample_rpc (@intparam int, \
         @sintparam smallint output, @floatparam float output, \
@@ -99,7 +97,7 @@ main(void)
 
 	memset(&srcfmt, 0, sizeof(CS_DATAFMT));
 	srcfmt.datatype = CS_CHAR_TYPE;
-	srcfmt.maxlength = strlen(moneystring);
+	srcfmt.maxlength = (CS_INT) strlen(moneystring);
 	srcfmt.precision = 5;
 	srcfmt.scale = 2;
 	srcfmt.locale = NULL;
@@ -477,12 +475,12 @@ CS_INT len;
 	case CS_VARCHAR_TYPE:
 	case CS_TEXT_TYPE:
 	case CS_IMAGE_TYPE:
-		len = MIN(column->maxlength, 1024);
+		len = TDS_MIN(column->maxlength, 1024);
 		break;
 
 	case CS_BINARY_TYPE:
 	case CS_VARBINARY_TYPE:
-		len = MIN((2 * column->maxlength) + 2, 1024);
+		len = TDS_MIN((2 * column->maxlength) + 2, 1024);
 		break;
 
 	case CS_BIT_TYPE:
@@ -523,7 +521,7 @@ CS_INT len;
 		break;
 	}
 
-	return MAX((CS_INT) (strlen(column->name) + 1), len);
+	return TDS_MAX((CS_INT) (strlen(column->name) + 1), len);
 }
 
 static CS_RETCODE
@@ -539,7 +537,7 @@ CS_INT disp_len;
 		disp_len = ex_display_dlen(&columns[i]);
 		printf("%s", columns[i].name);
 		fflush(stdout);
-		l = disp_len - strlen(columns[i].name);
+		l = disp_len - (CS_INT) strlen(columns[i].name);
 		for (j = 0; j < l; j++) {
 			fputc(' ', stdout);
 			fflush(stdout);

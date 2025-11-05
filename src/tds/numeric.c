@@ -39,7 +39,7 @@
  * precision (with the sign).
  * Support precision up to 77 digits
  */
-const int tds_numeric_bytes_per_prec[] = {
+const uint8_t tds_numeric_bytes_per_prec[] = {
 	/*
 	 * precision can't be 0 but using a value > 0 assure no
 	 * core if for some bug it's 0...
@@ -74,10 +74,10 @@ tds_money_to_string(const TDS_MONEY * money, char *s, bool use_2_digits)
 	p = s;
 	if (mymoney < 0) {
 		*p++ = '-';
-		/* we use unsigned cause this cause arithmetic problem for -2^63*/
-		n = -mymoney;
+		/* we use unsigned because this causes arithmetic problem for -2^63*/
+		n = (TDS_UINT8) -mymoney;
 	} else {
-		n = mymoney;
+		n = (TDS_UINT8) mymoney;
 	}
 	/* if machine is 64 bit you do not need to split n */
 	if (use_2_digits) {
@@ -130,8 +130,10 @@ tds_numeric_to_string(const TDS_NUMERIC * numeric, char *s)
 		*--pnum = TDS_GET_UA2BE(&number[n - 1]);
 	if (n == 1)
 		*--pnum = number[n];
+	/* remove leading zeroes */
 	while (!*pnum) {
 		++pnum;
+		/* we consumed all numbers, it's a zero */
 		if (pnum == packet_end) {
 			*s++ = '0';
 			if (numeric->scale) {
@@ -361,7 +363,7 @@ tds_numeric_change_prec_scale(TDS_NUMERIC * numeric, unsigned char new_prec, uns
 		/* multiply */
 		do {
 			/* multiply by at maximun TDS_WORD_DDIGIT */
-			unsigned int n = scale_diff > TDS_WORD_DDIGIT ? TDS_WORD_DDIGIT : scale_diff;
+			unsigned int n = TDS_MIN(scale_diff, TDS_WORD_DDIGIT);
 			TDS_WORD factor = factors[n];
 			TDS_WORD carry = 0;
 			scale_diff -= n; 
@@ -383,7 +385,7 @@ tds_numeric_change_prec_scale(TDS_NUMERIC * numeric, unsigned char new_prec, uns
 		/* divide */
 		scale_diff = -scale_diff;
 		do {
-			unsigned int n = scale_diff > TDS_WORD_DDIGIT ? TDS_WORD_DDIGIT : scale_diff;
+			unsigned int n = TDS_MIN(scale_diff, TDS_WORD_DDIGIT);
 			TDS_WORD factor = factors[n];
 			TDS_WORD borrow = 0;
 #if defined(USE_128_MULTIPLY)

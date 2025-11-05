@@ -6,7 +6,8 @@ static int bind_all = 0;
 static int normal_fetch = 0;
 static int use_cursors = 1;
 
-static void Test(void)
+static void
+Test(void)
 {
 #define ROWS 5
 	struct data_t {
@@ -71,7 +72,8 @@ static void Test(void)
 		CHKFetchScroll(SQL_FETCH_NEXT, 0, "S");
 }
 
-static void Init(void)
+static void
+Init(void)
 {
 	int i;
 	char sql[128];
@@ -84,10 +86,9 @@ static void Init(void)
 
 }
 
-int
-main(void)
+TEST_MAIN()
 {
-	odbc_use_version3 = 1;
+	odbc_use_version3 = true;
 	odbc_connect();
 
 	odbc_check_cursor();
@@ -102,7 +103,7 @@ main(void)
 
 	odbc_disconnect();
 
-	odbc_use_version3 = 0;
+	odbc_use_version3 = false;
 
 	odbc_connect();
 	Init();

@@ -15,7 +15,7 @@ static const char *proc = "stat_proc";
 static const char *table = "stat_proc";
 static const char *column = "@t";
 
-#define LEN(x) (x) ? strlen(x) : 0
+#define LEN(x) (x) ? (SQLSMALLINT) strlen(x) : 0
 
 static void
 TestProc(const char *catalog, const char *type, const char *expected)
@@ -95,29 +95,28 @@ set_dbname(const char *dbname)
 	CHKSetConnectAttr(SQL_ATTR_CURRENT_CATALOG, (SQLPOINTER) T(dbname), strlen(dbname)*sizeof(SQLTCHAR), "SI");
 }
 
-int
-main(void)
+TEST_MAIN()
 {
 	char int_buf[32];
 
-	odbc_use_version3 = 0;
+	odbc_use_version3 = false;
 	odbc_connect();
 
 	TestProc(NULL, "DATETIME", STR(SQL_TIMESTAMP));
 	TestTable(NULL, "DATETIME", STR(SQL_TIMESTAMP));
 	set_dbname("master");
-	TestTable(odbc_database, "DATETIME", STR(SQL_TIMESTAMP));
+	TestTable(common_pwd.database, "DATETIME", STR(SQL_TIMESTAMP));
 
 	odbc_disconnect();
 
 
-	odbc_use_version3 = 1;
+	odbc_use_version3 = true;
 	odbc_connect();
 
 	TestProc(NULL, "DATETIME", STR(SQL_TYPE_TIMESTAMP));
 	TestTable(NULL, "DATETIME", STR(SQL_TYPE_TIMESTAMP));
 	set_dbname("master");
-	TestTable(odbc_database, "DATETIME", STR(SQL_TYPE_TIMESTAMP));
+	TestTable(common_pwd.database, "DATETIME", STR(SQL_TYPE_TIMESTAMP));
 
 	odbc_disconnect();
 

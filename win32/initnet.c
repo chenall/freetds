@@ -8,6 +8,7 @@
 
 #include <freetds/windows.h>
 #include <freetds/macros.h>
+#include <freetds/sysdep_private.h>
 
 #ifdef DLL_EXPORT
 
@@ -38,6 +39,7 @@ DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved TDS_UNUSED)
 		break;
 
 	case DLL_PROCESS_DETACH:
+		tds_socket_done();
 #if defined(_MSC_VER) && defined(_DEBUG)
 		_CrtDumpMemoryLeaks();
 #endif

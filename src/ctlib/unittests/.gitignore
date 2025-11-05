@@ -37,4 +37,6 @@
 /variant
 /errors
 /ct_command
+/timeout
+/has_for_update
 /libcommon.a

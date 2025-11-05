@@ -29,9 +29,6 @@
 #include <stddef.h>
 #endif /* HAVE_STDDEF_H */
 
-#include "tds_sysdep_public.h"
-#include <freetds/sysdep_private.h>
-
 #define TDS_ZERO_FREE(x) do {free((x)); (x) = NULL;} while(0)
 #define TDS_VECTOR_SIZE(x) (sizeof(x)/sizeof(x[0]))
 
@@ -42,19 +39,18 @@
 #endif
 
 #if ENABLE_EXTRA_CHECKS
+# define TDS_EXTRA_CHECK(stmt) stmt
+#else
+# define TDS_EXTRA_CHECK(stmt)
+#endif
+
 # if defined(__llvm__) || (defined(__GNUC__) && (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6)))
 # define TDS_COMPILE_CHECK(name,check) \
     _Static_assert(check,#name)
 # else
 # define TDS_COMPILE_CHECK(name,check) \
-    extern int name[(check)?1:-1] TDS_UNUSED
+    typedef char _tds_check_##name[(check)?1:-1] TDS_UNUSED
 # endif
-# define TDS_EXTRA_CHECK(stmt) stmt
-#else
-# define TDS_COMPILE_CHECK(name,check) \
-    extern int disabled_check_##name TDS_UNUSED
-# define TDS_EXTRA_CHECK(stmt)
-#endif
 
 #if defined(__GNUC__) && __GNUC__ >= 3
 # define TDS_LIKELY(x)	__builtin_expect(!!(x), 1)
@@ -76,8 +72,12 @@
 #define TDS_UNUSED
 #endif
 
-#define TDS_INT2PTR(i) ((void*)(((char*)0)+((TDS_INTPTR)(i))))
+#define TDS_INT2PTR(i) ((void*)(((char*)0)+((ptrdiff_t)(i))))
 #define TDS_PTR2INT(p) ((int)(((char*)(p))-((char*)0)))
+
+#define TDS_MAX(a,b) ( (a) > (b) ? (a) : (b) )
+#define TDS_MIN(a,b) ( (a) < (b) ? (a) : (b) )
+#define TDS_CLAMP(x,a,b) ( (x) < (a) ? (a) : (x) > (b) ? (b) : (x) )
 
 #define tds_new(type, n) ((type *) malloc(sizeof(type) * (n)))
 #define tds_new0(type, n) ((type *) calloc(n, sizeof(type)))

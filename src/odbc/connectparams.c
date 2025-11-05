@@ -95,8 +95,11 @@ static FILE *tdoGetIniFileName(void);
  *    expect see tdoGetIniFileName().
  *
  */
-static int SQLGetPrivateProfileString(LPCSTR pszSection, LPCSTR pszEntry, LPCSTR pszDefault, LPSTR pRetBuffer, int nRetBuffer,
-				      LPCSTR pszFileName);
+#ifndef _WIN32
+static
+#endif
+int SQLGetPrivateProfileString(LPCSTR pszSection, LPCSTR pszEntry, LPCSTR pszDefault,
+			       LPSTR pRetBuffer, int nRetBuffer, LPCSTR pszFileName);
 #endif
 
 #if defined(FILENAME_MAX) && FILENAME_MAX < 512
@@ -160,6 +163,17 @@ odbc_encrypt2encryption(const char *encrypt)
 		return TDS_STR_ENCRYPTION_REQUEST;
 
 	return "invalid_encrypt";
+}
+
+static const char *
+odbc_appintent2readonly(const char *appintent)
+{
+	if (strcasecmp(appintent,"ReadOnly") == 0)
+		return "yes";
+	if (strcasecmp(appintent,"ReadWrite") == 0)
+		return "no";
+
+	return "Invalid_application_intent";
 }
 
 /** 
@@ -257,6 +271,12 @@ odbc_get_dsn_info(TDS_ERRS *errs, const char *DSN, TDSLOGIN * login)
 	if (myGetPrivateProfileString(DSN, odbc_param_Encrypt, tmp) > 0)
 		tds_parse_conf_section(TDS_STR_ENCRYPTION, odbc_encrypt2encryption(tmp), login);
 
+	if (myGetPrivateProfileString(DSN, odbc_param_ServerCertificate, tmp) > 0)
+		tds_parse_conf_section(TDS_STR_CAFILE, tmp, login);
+
+	if (myGetPrivateProfileString(DSN, odbc_param_ApplicationIntent, tmp) > 0)
+		tds_parse_conf_section(TDS_STR_READONLY_INTENT, odbc_appintent2readonly(tmp), login);
+
 	if (myGetPrivateProfileString(DSN, odbc_param_UseNTLMv2, tmp) > 0)
 		tds_parse_conf_section(TDS_STR_USENTLMV2, tmp, login);
 
@@ -282,6 +302,9 @@ odbc_get_dsn_info(TDS_ERRS *errs, const char *DSN, TDSLOGIN * login)
 
 	if (myGetPrivateProfileString(DSN, odbc_param_Timeout, tmp) > 0)
 		tds_parse_conf_section(TDS_STR_TIMEOUT, tmp, login);
+
+	if (myGetPrivateProfileString(DSN, odbc_param_ConnectionTimeout, tmp) > 0)
+		tds_parse_conf_section(TDS_STR_CONNTIMEOUT, tmp, login);
 
 	if (myGetPrivateProfileString(DSN, odbc_param_HostNameInCertificate, tmp) > 0
 	    && (tmp[0] && strcmp(tmp, "null") != 0)) {
@@ -479,6 +502,8 @@ odbc_parse_connect_string(TDS_ERRS *errs, const char *connect_string, const char
 			tds_parse_conf_section(TDS_STR_ENCRYPTION, tds_dstr_cstr(&value), login);
 		} else if (CHK_PARAM(Encrypt)) {
 			tds_parse_conf_section(TDS_STR_ENCRYPTION, odbc_encrypt2encryption(tds_dstr_cstr(&value)), login);
+		} else if (CHK_PARAM(ServerCertificate)) {
+			tds_parse_conf_section(TDS_STR_CAFILE, tds_dstr_cstr(&value), login);
 		} else if (CHK_PARAM(UseNTLMv2)) {
 			tds_parse_conf_section(TDS_STR_USENTLMV2, tds_dstr_cstr(&value), login);
 		} else if (CHK_PARAM(REALM)) {
@@ -496,21 +521,14 @@ odbc_parse_connect_string(TDS_ERRS *errs, const char *connect_string, const char
 		} else if (CHK_PARAM(AttachDbFilename)) {
 			dest_s = &login->db_filename;
 		} else if (CHK_PARAM(ApplicationIntent)) {
-			const char *readonly_intent;
-
-			if (strcasecmp(tds_dstr_cstr(&value), "ReadOnly") == 0) {
-				readonly_intent = "yes";
-			} else if (strcasecmp(tds_dstr_cstr(&value), "ReadWrite") == 0) {
-				readonly_intent = "no";
-			} else {
-				tdsdump_log(TDS_DBG_ERROR, "Invalid ApplicationIntent %s\n", tds_dstr_cstr(&value));
-				goto Cleanup;
-			}
-
+			const char *readonly_intent =
+				odbc_appintent2readonly(tds_dstr_cstr(&value));
 			tds_parse_conf_section(TDS_STR_READONLY_INTENT, readonly_intent, login);
 			tdsdump_log(TDS_DBG_INFO1, "Application Intent %s\n", readonly_intent);
 		} else if (CHK_PARAM(Timeout)) {
 			tds_parse_conf_section(TDS_STR_TIMEOUT, tds_dstr_cstr(&value), login);
+		} else if (CHK_PARAM(ConnectionTimeout)) {
+			tds_parse_conf_section(TDS_STR_CONNTIMEOUT, tds_dstr_cstr(&value), login);
 		} else if (CHK_PARAM(HostNameInCertificate)) {
 			dest_s = &login->certificate_host_name;
 		}
@@ -584,7 +602,7 @@ odbc_build_connect_string(TDS_ERRS *errs, TDS_PARSED_PARAM *params, char **out)
 
 #if !HAVE_SQLGETPRIVATEPROFILESTRING
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(TDS_NO_DM)
 #  error There is something wrong  in configuration...
 #endif
 
@@ -606,13 +624,16 @@ tdoParseProfile(const char *option, const char *value, void *param)
 	if (strcasecmp(p->entry, option) == 0) {
 		strlcpy(p->buffer, value, p->buffer_len);
 
-		p->ret_val = strlen(p->buffer);
+		p->ret_val = (int) strlen(p->buffer);
 		p->found = 1;
 	}
 	return true;
 }
 
-static int
+#ifndef _WIN32
+static
+#endif
+int
 SQLGetPrivateProfileString(LPCSTR pszSection, LPCSTR pszEntry, LPCSTR pszDefault, LPSTR pRetBuffer, int nRetBuffer,
 			   LPCSTR pszFileName)
 {
@@ -659,7 +680,7 @@ SQLGetPrivateProfileString(LPCSTR pszSection, LPCSTR pszEntry, LPCSTR pszDefault
 	if (pszDefault && !param.found) {
 		strlcpy(pRetBuffer, pszDefault, nRetBuffer);
 
-		param.ret_val = strlen(pRetBuffer);
+		param.ret_val = (int) strlen(pRetBuffer);
 	}
 
 	fclose(hFile);

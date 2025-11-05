@@ -15,13 +15,12 @@ exec_direct(const char *stmt)
 	CHKFreeHandle(SQL_HANDLE_STMT, (SQLHANDLE) odbc_stmt, "S");
 }
 
-int
-main(void)
+TEST_MAIN()
 {
 	char buff[64];
 	SQLLEN ind;
 
-	odbc_use_version3 = 1;
+	odbc_use_version3 = true;
 	odbc_connect();
 
 	odbc_check_cursor();

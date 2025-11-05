@@ -42,6 +42,7 @@ typedef struct {
 /* list of integer and floating point types */
 static const type_desc number_types[] = {
 	{ SYBINT1, true },
+	{ SYBSINT1, true },
 	{ SYBUINT1, true },
 	{ SYBINT2, true },
 	{ SYBUINT2, true },
@@ -78,8 +79,7 @@ static const char *bounds[] = {
 	NULL,
 };
 
-int
-main(void)
+TEST_MAIN()
 {
 	const char **bound;
 
@@ -215,7 +215,7 @@ is_valid(const char *num, int type, CONV_RESULT *cr)
 	if (!cr)
 		cr = &dummy_cr;
 
-	return convert_and_free(SYBVARCHAR, num, strlen(num), type, cr) >= 0;
+	return convert_and_free(SYBVARCHAR, num, (TDS_UINT) strlen(num), type, cr) >= 0;
 }
 
 /* convert multiple precision to a floating number of a specific type */

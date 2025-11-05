@@ -6,14 +6,13 @@
 	This test on Sybase should not raise an error
 */
 
-int
-main(void)
+TEST_MAIN()
 {
 	SQLSMALLINT num_params, cols;
 	SQLLEN count;
 	SQLINTEGER id;
 
-	odbc_use_version3 = 1;
+	odbc_use_version3 = true;
 	odbc_connect();
 
 	odbc_command("create table #tester (id int not null, name varchar(20) not null)");

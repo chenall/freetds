@@ -60,9 +60,6 @@ static TDSRET tds7_send_login(TDSSOCKET * tds, const TDSLOGIN * login);
 static void tds7_crypt_pass(const unsigned char *clear_pass,
 			    size_t len, unsigned char *crypt_pass);
 
-#undef MIN
-#define MIN(a,b) (((a) < (b)) ? (a) : (b))
-
 void
 tds_set_version(TDSLOGIN * tds_login, TDS_TINYINT major_ver, TDS_TINYINT minor_ver)
 {
@@ -441,7 +438,7 @@ tds_setup_connection(TDSSOCKET *tds, TDSLOGIN *login, bool set_db, bool single_q
 {
 	TDSRET erc;
 	char *str;
-	int len;
+	size_t len;
 	const char *const product_name = (tds->conn->product_name != NULL ? tds->conn->product_name : "");
 	const bool is_sql_anywhere = (strcasecmp(product_name, "SQL Anywhere") == 0);
 	const bool is_openserver = (strcasecmp(product_name, "OpenServer") == 0);
@@ -687,6 +684,11 @@ reroute:
 		db_selected = true;
 	} else {
 		tds->out_flag = TDS_LOGIN;
+
+		/* SAP ASE 15.0+ SSL mode encrypts entire connection (like stunnel) */
+		if (login->encryption_level == TDS_ENCRYPTION_STRICT)
+			TDS_PROPAGATE(tds_ssl_init(tds, true));
+
 		erc = tds_send_login(tds, login);
 	}
 	if (TDS_FAILED(erc) || TDS_FAILED(tds_process_login_tokens(tds))) {
@@ -781,9 +783,21 @@ tds_connect_and_login(TDSSOCKET * tds, TDSLOGIN * login)
 }
 
 static void
-tds_put_login_string(TDSSOCKET * tds, const char *buf, int n)
+tds_put_buf(TDSSOCKET * tds, const unsigned char *buf, size_t dsize, size_t ssize)
 {
-	const int buf_len = buf ? (int)strlen(buf) : 0;
+	size_t cpsize;
+
+	cpsize = TDS_MIN(ssize, dsize);
+	tds_put_n(tds, buf, cpsize);
+	dsize -= cpsize;
+	tds_put_n(tds, NULL, dsize);
+	TDS_PUT_BYTE(tds, cpsize);
+}
+
+static void
+tds_put_login_string(TDSSOCKET * tds, const char *buf, size_t n)
+{
+	const size_t buf_len = buf ? strlen(buf) : 0;
 	tds_put_buf(tds, (const unsigned char *) buf, n, buf_len);
 }
 
@@ -818,7 +832,6 @@ tds_send_login(TDSSOCKET * tds, const TDSLOGIN * login)
 	unsigned char sec_flags = 0;
 	bool use_kerberos = false;
 
-	int len;
 	char blockstr[16];
 
 	TDS_TINYINT encryption_level = login->encryption_level;
@@ -905,14 +918,14 @@ tds_send_login(TDSSOCKET * tds, const TDSLOGIN * login)
 	} else if (encryption_level != TDS_ENCRYPTION_OFF) {
 		tds_put_n(tds, NULL, 256);
 	} else {
-		len = (int)tds_dstr_len(&login->password);
+		size_t len = tds_dstr_len(&login->password);
 		if (len > 253)
 			len = 0;
 		tds_put_byte(tds, 0);
-		tds_put_byte(tds, len);
+		TDS_PUT_BYTE(tds, len);
 		tds_put_n(tds, tds_dstr_cstr(&login->password), len);
 		tds_put_n(tds, NULL, 253 - len);
-		tds_put_byte(tds, len + 2);
+		TDS_PUT_BYTE(tds, len + 2);
 	}
 
 	tds_put_n(tds, protocol_version, 4);	/* TDS version; { 0x04,0x02,0x00,0x00 } */
@@ -999,7 +1012,7 @@ tds7_send_login(TDSSOCKET * tds, const TDSLOGIN * login)
 	TDS_INT time_zone = -120;
 	TDS_INT tds7version = tds70Version;
 
-	TDS_INT block_size = 4096;
+	unsigned int block_size = 4096;
 	
 	unsigned char option_flag1 = TDS_SET_LANG_ON | TDS_USE_DB_NOTIFY | TDS_INIT_DB_FATAL;
 	unsigned char option_flag2 = login->option_flag2;
@@ -1016,9 +1029,9 @@ tds7_send_login(TDSSOCKET * tds, const TDSLOGIN * login)
 	const char *user_name = tds_dstr_cstr(&login->user_name);
 	unsigned char *pwd;
 
-	/* FIXME: These are defined as size_t, but should be TDS_SMALLINT. */
+	/* FIXME: These should be TDS_SMALLINT. */
 	size_t user_name_len = strlen(user_name);
-	size_t auth_len = 0;
+	unsigned int auth_len = 0;
 
 	static const char ext_data[] =
 		"\x0a\x01\x00\x00\x00\x01"	/* Enable UTF-8 */
@@ -1042,7 +1055,7 @@ tds7_send_login(TDSSOCKET * tds, const TDSLOGIN * login)
 	};
 	struct {
 		const void *ptr;
-		unsigned pos, len, limit;
+		size_t pos, len, limit;
 	} data_fields[NUM_DATA_FIELDS], *field;
 
 	tds->out_flag = TDS7_LOGIN;
@@ -1134,7 +1147,7 @@ tds7_send_login(TDSSOCKET * tds, const TDSLOGIN * login)
 			field->len = 4;
 			continue;
 		}
-		data_stream.size = MIN(data_stream.size, data_pos + field->limit);
+		data_stream.size = TDS_MIN(data_stream.size, data_pos + field->limit);
 		data_stream.stream.write(&data_stream.stream, 0);
 		field->len = data_stream.size - data_pos;
 	}
@@ -1255,7 +1268,7 @@ tds7_send_login(TDSSOCKET * tds, const TDSLOGIN * login)
 
 	/* authentication stuff */
 	TDS_PUT_SMALLINT(tds, current_pos + data_stream.size);
-	TDS_PUT_SMALLINT(tds, MIN(auth_len, 0xffffu));
+	TDS_PUT_SMALLINT(tds, TDS_MIN(auth_len, 0xffffu));
 
 	/* db file */
 	PUT_STRING_FIELD_PTR(DB_FILENAME);
@@ -1329,7 +1342,7 @@ tds71_do_login(TDSSOCKET * tds, TDSLOGIN* login)
 {
 	int i, pkt_len;
 	const char *instance_name = tds_dstr_isempty(&login->instance_name) ? "MSSQLServer" : tds_dstr_cstr(&login->instance_name);
-	int instance_name_len = strlen(instance_name) + 1;
+	TDS_USMALLINT instance_name_len = strlen(instance_name) + 1;
 	TDS_CHAR crypt_flag;
 	unsigned int start_pos = 21;
 	TDSRET ret;
@@ -1452,7 +1465,7 @@ tds71_do_login(TDSSOCKET * tds, TDSLOGIN* login)
 		if (IS_TDS72_PLUS(tds->conn) && type == 4 && len >= 1) {
 			mars_replied = true;
 #if ENABLE_ODBC_MARS
-			login->mars = p[off];
+			login->mars = !!p[off];
 #endif
 		} else if (type == 0 && len >= 4) {
 			tdsdump_log(TDS_DBG_INFO1, "detected server version %d.%d.%d\n", p[off], p[off + 1], (p[off + 2] << 8) | p[off + 3]);

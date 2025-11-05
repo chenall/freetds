@@ -60,7 +60,8 @@ get_desc_field(SQLINTEGER desc_type, SQLSMALLINT icol, SQLSMALLINT fDescType, si
 
 	memset(&buf, 0x5a, sizeof(buf));
 	ind = 1234;
-	CHKGetDescField(desc, icol, fDescType, &buf, size, &ind, "S");
+	CHKGetDescField(desc, icol, fDescType, &buf, (SQLINTEGER) size, &ind,
+			"S");
 	assert(ind == size);
 
 	return buf;
@@ -387,8 +388,8 @@ TestDescriptorValues(void)
 	SQLWCHAR *tableName;
 	SQLLEN numRows;
 	SQLPOINTER ptr;
-	SQLSMALLINT count, type;
-	SQLLEN len;
+	SQLSMALLINT type;
+	SQLLEN count, len;
 	bool failed = false;
 
 	tableName = odbc_get_sqlwchar(&odbc_buf, "TVPType");
@@ -573,10 +574,9 @@ TestInitializeLeak(void)
 }
 #endif
 
-int
-main(void)
+TEST_MAIN()
 {
-	odbc_use_version3 = 1;
+	odbc_use_version3 = true;
 
 	setup();
 

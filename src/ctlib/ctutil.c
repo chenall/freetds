@@ -54,6 +54,9 @@ TEST_EQUAL(t12,CS_COMPUTEFMT_RESULT,TDS_COMPUTEFMT_RESULT);
 TEST_EQUAL(t13,CS_ROWFMT_RESULT,TDS_ROWFMT_RESULT);
 TEST_EQUAL(t14,CS_MSG_RESULT,TDS_MSG_RESULT);
 TEST_EQUAL(t15,CS_DESCRIBE_RESULT,TDS_DESCRIBE_RESULT);
+TEST_EQUAL(t16,CS_INT_CONTINUE,TDS_INT_CONTINUE);
+TEST_EQUAL(t17,CS_INT_CANCEL,TDS_INT_CANCEL);
+TEST_EQUAL(t18,CS_INT_TIMEOUT,TDS_INT_TIMEOUT);
 
 #define TEST_ATTRIBUTE(t,sa,fa,sb,fb) \
 	TDS_COMPILE_CHECK(t,sizeof(((sa*)0)->fa) == sizeof(((sb*)0)->fb) && TDS_OFFSET(sa,fa) == TDS_OFFSET(sb,fb))
@@ -125,18 +128,28 @@ _ct_handle_client_message(const TDSCONTEXT * ctx_tds, TDSSOCKET * tds, TDSMESSAG
 	errmsg.msgnumber = msg->msgno;
 	errmsg.severity = _ct_translate_severity(msg->severity);
 	strlcpy(errmsg.msgstring, msg->message, sizeof(errmsg.msgstring));
-	errmsg.msgstringlen = strlen(errmsg.msgstring);
-	errmsg.osstring[0] = '\0';
-	errmsg.osstringlen = 0;
+	errmsg.msgstringlen = (CS_INT) strlen(errmsg.msgstring);
+
+	if (msg->oserr) {
+		char *osstr = sock_strerror(msg->oserr);
+
+		errmsg.osstringlen = (CS_INT) strlen(osstr);
+		strlcpy(errmsg.osstring, osstr, sizeof(errmsg.osstring));
+		sock_strerror_free(osstr);
+	} else {
+		errmsg.osstring[0] = '\0';
+		errmsg.osstringlen = 0;
+	}
+
 	/* if there is no connection, attempt to call the context handler */
 	if (!con) {
 		ctx = (CS_CONTEXT *) ctx_tds->parent;
-		if (ctx->_clientmsg_cb)
-			ret = ctx->_clientmsg_cb(ctx, con, &errmsg);
-	} else if (con->_clientmsg_cb)
-		ret = con->_clientmsg_cb(con->ctx, con, &errmsg);
-	else if (con->ctx->_clientmsg_cb)
-		ret = con->ctx->_clientmsg_cb(con->ctx, con, &errmsg);
+		if (ctx->clientmsg_cb)
+			ret = ctx->clientmsg_cb(ctx, con, &errmsg);
+	} else if (con->clientmsg_cb)
+		ret = con->clientmsg_cb(con->ctx, con, &errmsg);
+	else if (con->ctx->clientmsg_cb)
+		ret = con->ctx->clientmsg_cb(con->ctx, con, &errmsg);
 		
 	/*
 	 * The return code from the error handler is either CS_SUCCEED or CS_FAIL.
@@ -161,6 +174,21 @@ _ct_handle_client_message(const TDSCONTEXT * ctx_tds, TDSSOCKET * tds, TDSMESSAG
 	return TDS_INT_CANCEL;
 }
 
+/*
+ * interrupt handler, installed on demand to avoid gratuitously interfering
+ * with tds_select's optimization for the no-handler case */
+int
+_ct_handle_interrupt(void * ptr)
+{
+	CS_CONNECTION *con = (CS_CONNECTION *) ptr;
+	if (con->interrupt_cb)
+		return (*con->interrupt_cb)(con);
+	else if (con->ctx->interrupt_cb)
+		return (*con->ctx->interrupt_cb)(con);
+	else
+		return TDS_INT_CONTINUE;
+}
+
 /* message handler */
 TDSRET
 _ct_handle_server_message(const TDSCONTEXT * ctx_tds, TDSSOCKET * tds, TDSMESSAGE * msg)
@@ -181,18 +209,18 @@ _ct_handle_server_message(const TDSCONTEXT * ctx_tds, TDSSOCKET * tds, TDSMESSAG
 	memset(&errmsg, '\0', sizeof(errmsg));
 	errmsg.common.msgnumber = msg->msgno;
 	strlcpy(errmsg.common.text, msg->message, sizeof(errmsg.common.text));
-	errmsg.common.textlen = strlen(errmsg.common.text);
+	errmsg.common.textlen = (CS_INT) strlen(errmsg.common.text);
 	errmsg.common.state = msg->state;
 	errmsg.common.severity = msg->severity;
 
 #define MIDDLE_PART(part) do { \
 	common2 = (CS_SERVERMSG_COMMON2 *) &(errmsg.part.line); \
 	if (msg->server) { \
-		errmsg.part.svrnlen = strlen(msg->server); \
+		errmsg.part.svrnlen = (CS_INT) strlen(msg->server); \
 		strlcpy(errmsg.part.svrname, msg->server, sizeof(errmsg.part.svrname)); \
 	} \
 	if (msg->proc_name) { \
-		errmsg.part.proclen = strlen(msg->proc_name); \
+		errmsg.part.proclen = (CS_INT) strlen(msg->proc_name); \
 		strlcpy(errmsg.part.proc, msg->proc_name, sizeof(errmsg.part.proc)); \
 	} \
 } while(0)
@@ -206,17 +234,17 @@ _ct_handle_server_message(const TDSCONTEXT * ctx_tds, TDSSOCKET * tds, TDSMESSAG
 	common2->sqlstate[0] = 0;
 	if (msg->sql_state)
 		strlcpy((char *) common2->sqlstate, msg->sql_state, sizeof(common2->sqlstate));
-	common2->sqlstatelen = strlen((char *) common2->sqlstate);
+	common2->sqlstatelen = (CS_INT) strlen((char *) common2->sqlstate);
 	common2->line = msg->line_number;
 
 	/* if there is no connection, attempt to call the context handler */
 	if (!con) {
-		if (ctx->_servermsg_cb)
-			ret = ctx->_servermsg_cb(ctx, con, &errmsg.user);
-	} else if (con->_servermsg_cb) {
-		ret = con->_servermsg_cb(ctx, con, &errmsg.user);
-	} else if (ctx->_servermsg_cb) {
-		ret = ctx->_servermsg_cb(ctx, con, &errmsg.user);
+		if (ctx->servermsg_cb)
+			ret = ctx->servermsg_cb(ctx, con, &errmsg.user);
+	} else if (con->servermsg_cb) {
+		ret = con->servermsg_cb(ctx, con, &errmsg.user);
+	} else if (ctx->servermsg_cb) {
+		ret = ctx->servermsg_cb(ctx, con, &errmsg.user);
 	}
 	return ret == CS_SUCCEED ? TDS_SUCCESS : TDS_FAIL;
 }
@@ -270,7 +298,7 @@ _ct_datafmt_conv_in(CS_CONTEXT * ctx, const CS_DATAFMT * datafmt, CS_DATAFMT_LAR
 	small = (const CS_DATAFMT_SMALL *) datafmt;
 
 	strlcpy(fmtbuf->name, small->name, sizeof(fmtbuf->name));
-	fmtbuf->namelen = strlen(fmtbuf->name);
+	fmtbuf->namelen = (CS_INT) strlen(fmtbuf->name);
 	*((CS_DATAFMT_COMMON *) &fmtbuf->datatype) = *((CS_DATAFMT_COMMON *) &small->datatype);
 	return fmtbuf;
 }
@@ -314,7 +342,7 @@ _ct_datafmt_conv_back(CS_DATAFMT * datafmt, CS_DATAFMT_LARGE *fmtbuf)
 	small = (CS_DATAFMT_SMALL *) datafmt;
 
 	strlcpy(small->name, fmtbuf->name, sizeof(small->name));
-	small->namelen = strlen(small->name);
+	small->namelen = (CS_INT) strlen(small->name);
 	*((CS_DATAFMT_COMMON *) &small->datatype) = *((CS_DATAFMT_COMMON *) &fmtbuf->datatype);
 }
 

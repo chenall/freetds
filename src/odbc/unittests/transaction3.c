@@ -2,9 +2,9 @@
 
 /* Test commit/rollback with auto commit set to on (the default) */
 
-int main(void)
+TEST_MAIN()
 {
-	odbc_use_version3 = 1;
+	odbc_use_version3 = true;
 	odbc_connect();
 
 	CHKEndTran(SQL_HANDLE_DBC, odbc_conn, SQL_COMMIT, "S");

@@ -5,30 +5,32 @@
 
 #include "common.h"
 
-static int failed = 0;
+#include <freetds/bool.h>
+#include <freetds/replacements.h>
+
+static bool failed = false;
 
 static void
 failure(const char *fmt, ...)
 {
 	va_list ap;
 
-	failed = 1;
+	failed = true;
 
-        va_start(ap, fmt);
-        vfprintf(stderr, fmt, ap);
-        va_end(ap);
+	va_start(ap, fmt);
+	vfprintf(stderr, fmt, ap);
+	va_end(ap);
 }
 
 #define INFILE_NAME "t0016"
 #define TABLE_NAME "#dblib0016"
 
 static void test_file(const char *fn);
-static int compare_files(const char *fn1, const char *fn2);
+static bool compare_files(const char *fn1, const char *fn2);
 static unsigned count_file_rows(FILE *f);
 static DBPROCESS *dbproc;
 
-int
-main(int argc, char *argv[])
+TEST_MAIN()
 {
 	LOGINREC *login;
 	char in_file[30];
@@ -41,6 +43,7 @@ main(int argc, char *argv[])
 
 	read_login_info(argc, argv);
 	printf("Starting %s\n", argv[0]);
+	dbsetversion(DBVERSION_100);
 	dbinit();
 
 	dberrhandle(syb_err_handler);
@@ -53,7 +56,7 @@ main(int argc, char *argv[])
 	DBSETLPWD(login, PASSWORD);
 	DBSETLUSER(login, USER);
 	DBSETLAPP(login, "t0016");
-	DBSETLCHARSET(login, "UTF-8");
+	DBSETLCHARSET(login, "utf8");
 
 	dbproc = dbopen(login, SERVER);
 	if (strlen(DATABASE)) {
@@ -77,13 +80,13 @@ main(int argc, char *argv[])
 	return failed ? 1 : 0;
 }
 
-static int got_error = 0;
+static bool got_error = false;
 
 static int
 ignore_msg_handler(DBPROCESS * dbproc TDS_UNUSED, DBINT msgno TDS_UNUSED, int state TDS_UNUSED, int severity TDS_UNUSED,
 		   char *text TDS_UNUSED, char *server TDS_UNUSED, char *proc TDS_UNUSED, int line TDS_UNUSED)
 {
-	got_error = 1;
+	got_error = true;
 	return 0;
 }
 
@@ -91,7 +94,7 @@ static int
 ignore_err_handler(DBPROCESS * dbproc TDS_UNUSED, int severity TDS_UNUSED, int dberr TDS_UNUSED,
 		   int oserr TDS_UNUSED, char *dberrstr TDS_UNUSED, char *oserrstr TDS_UNUSED)
 {
-	got_error = 1;
+	got_error = true;
 	return INT_CANCEL;
 }
 
@@ -130,7 +133,7 @@ test_file(const char *fn)
 	dbmsghandle(ignore_msg_handler);
 
 	printf("Creating table '%s'\n", TABLE_NAME);
-	got_error = 0;
+	got_error = false;
 	sql_cmd(dbproc);
 	dbsqlexec(dbproc);
 	while (dbresults(dbproc) != NO_MORE_RESULTS)
@@ -141,15 +144,6 @@ test_file(const char *fn)
 
 	if (got_error)
 		return;
-
-	/* BCP in */
-
-	printf("bcp_init with in_file as '%s'\n", in_file);
-	ret = bcp_init(dbproc, TABLE_NAME, in_file, err_file, DB_IN);
-	if (ret != SUCCEED)
-		failure("bcp_init failed\n");
-
-	printf("return from bcp_init = %d\n", ret);
 
 	ret = sql_cmd(dbproc);
 	printf("return from dbcmd = %d\n", ret);
@@ -165,17 +159,26 @@ test_file(const char *fn)
 		}
 	}
 
+	/* BCP in */
+
+	printf("bcp_init with in_file as '%s'\n", in_file);
+	ret = bcp_init(dbproc, TABLE_NAME, in_file, (char*) err_file, DB_IN);
+	if (ret != SUCCEED)
+		failure("bcp_init failed\n");
+
+	printf("return from bcp_init = %d\n", ret);
+
 	ret = bcp_columns(dbproc, num_cols);
 	if (ret != SUCCEED)
 		failure("bcp_columns failed\n");
 	printf("return from bcp_columns = %d\n", ret);
 
 	for (i = 1; i < num_cols; i++) {
-		if ((ret = bcp_colfmt(dbproc, i, SYBCHAR, 0, -1, (const BYTE *) "\t", sizeof(char), i)) == FAIL)
+		if ((ret = bcp_colfmt(dbproc, i, SYBCHAR, 0, -1, (BYTE *) "\t", sizeof(char), i)) == FAIL)
 			failure("return from bcp_colfmt = %d\n", ret);
 	}
 
-	if ((ret = bcp_colfmt(dbproc, num_cols, SYBCHAR, 0, -1, (const BYTE *) "\n", sizeof(char), num_cols)) == FAIL)
+	if ((ret = bcp_colfmt(dbproc, num_cols, SYBCHAR, 0, -1, (BYTE *) "\n", sizeof(char), num_cols)) == FAIL)
 		failure("return from bcp_colfmt = %d\n", ret);
 
 
@@ -188,7 +191,7 @@ test_file(const char *fn)
 	/* BCP out */
 
 	rows_copied = 0;
-	ret = bcp_init(dbproc, TABLE_NAME, out_file, err_file, DB_OUT);
+	ret = bcp_init(dbproc, TABLE_NAME, (char *) out_file, (char *) err_file, DB_OUT);
 	if (ret != SUCCEED)
 		failure("bcp_int failed\n");
 
@@ -205,11 +208,11 @@ test_file(const char *fn)
 	ret = bcp_columns(dbproc, num_cols);
 
 	for (i = 1; i < num_cols; i++) {
-		if ((ret = bcp_colfmt(dbproc, i, SYBCHAR, 0, -1, (const BYTE *) "\t", sizeof(char), i)) == FAIL)
+		if ((ret = bcp_colfmt(dbproc, i, SYBCHAR, 0, -1, (BYTE *) "\t", sizeof(char), i)) == FAIL)
 			failure("return from bcp_colfmt = %d\n", ret);
 	}
 
-	if ((ret = bcp_colfmt(dbproc, num_cols, SYBCHAR, 0, -1, (const BYTE *) "\n", sizeof(char), num_cols)) == FAIL)
+	if ((ret = bcp_colfmt(dbproc, num_cols, SYBCHAR, 0, -1, (BYTE *) "\n", sizeof(char), num_cols)) == FAIL)
 		failure("return from bcp_colfmt = %d\n", ret);
 
 	ret = bcp_exec(dbproc, &rows_copied);
@@ -230,10 +233,11 @@ test_file(const char *fn)
 	if (compare_files(in_file, out_file))
 		printf("Input and output files are equal\n");
 	else
-		failed = 1;
+		failed = true;
 }
 
-static size_t fgets_raw(char *s, int len, FILE *f)
+static size_t
+fgets_raw(char *s, int len, FILE *f)
 {
 	char *p = s;
 
@@ -254,9 +258,10 @@ static size_t fgets_raw(char *s, int len, FILE *f)
 	return p - s;
 }
 
-static int compare_files(const char *fn1, const char *fn2)
+static bool
+compare_files(const char *fn1, const char *fn2)
 {
-	int equal = 1;
+	bool equal = true;
 	FILE *f1, *f2;
 	size_t s1, s2;
 
@@ -272,7 +277,7 @@ static int compare_files(const char *fn1, const char *fn2)
 
 			/* EOF or error of one */
 			if (!!s1 != !!s2) {
-				equal = 0;
+				equal = false;
 				failure("error reading a file or EOF of a file\n");
 				break;
 			}
@@ -281,13 +286,13 @@ static int compare_files(const char *fn1, const char *fn2)
 			if (!s1) {
 				if (feof(f1) && feof(f2))
 					break;
-				equal = 0;
+				equal = false;
 				failure("error reading a file\n");
 				break;
 			}
 
 			if (s1 != s2 || memcmp(line1, line2, s1) != 0) {
-				equal = 0;
+				equal = false;
 				failure("File different at line %d\n"
 					" input: %s"
 					" output: %s",
@@ -295,7 +300,7 @@ static int compare_files(const char *fn1, const char *fn2)
 			}
 		}
 	} else {
-		equal = 0;
+		equal = false;
 		failure("error opening files\n");
 	}
 	if (f1)
@@ -306,7 +311,8 @@ static int compare_files(const char *fn1, const char *fn2)
 	return equal;
 }
 
-static unsigned count_file_rows(FILE *f)
+static unsigned
+count_file_rows(FILE *f)
 {
 	size_t s;
 	unsigned rows = 1;

@@ -214,7 +214,7 @@ blk_describe(CS_BLKDESC * blkdesc, CS_INT item, CS_DATAFMT * datafmt_arg)
 	curcol = blkdesc->bcpinfo.bindinfo->columns[item - 1];
 	/* name is always null terminated */
 	strlcpy(datafmt->name, tds_dstr_cstr(&curcol->column_name), sizeof(datafmt->name));
-	datafmt->namelen = strlen(datafmt->name);
+	datafmt->namelen = (CS_INT) strlen(datafmt->name);
 	/* need to turn the SYBxxx into a CS_xxx_TYPE */
 	datatype = _ct_get_client_type(curcol, true);
 	if (datatype == CS_ILLEGAL_TYPE)
@@ -286,7 +286,7 @@ blk_done(CS_BLKDESC * blkdesc, CS_INT type, CS_INT * outrow)
 	
 		blkdesc->bcpinfo.direction = 0;
 		blkdesc->bcpinfo.bind_count = CS_UNUSED;
-		blkdesc->bcpinfo.xfer_init = 0;
+		blkdesc->bcpinfo.xfer_init = false;
 
 		break;
 
@@ -359,7 +359,7 @@ blk_init(CS_BLKDESC * blkdesc, CS_INT direction, CS_CHAR * tablename, CS_INT tna
 
 	blkdesc->bcpinfo.direction = direction;
 	blkdesc->bcpinfo.bind_count = CS_UNUSED;
-	blkdesc->bcpinfo.xfer_init = 0;
+	blkdesc->bcpinfo.xfer_init = false;
 
 	if (TDS_FAILED(tds_bcp_init(CONN(blkdesc)->tds_socket, &blkdesc->bcpinfo))) {
 		_ctclient_msg(NULL, CONN(blkdesc), "blk_init", 2, 5, 1, 140, "");
@@ -384,14 +384,14 @@ blk_props(CS_BLKDESC * blkdesc, CS_INT action, CS_INT property, CS_VOID * buffer
 			if (buffer) {
 				memcpy(&intval, buffer, sizeof(intval));
 				if (intval == CS_TRUE)
-					blkdesc->bcpinfo.identity_insert_on = 1;
+					blkdesc->bcpinfo.identity_insert_on = true;
 				if (intval == CS_FALSE)
-					blkdesc->bcpinfo.identity_insert_on = 0;
+					blkdesc->bcpinfo.identity_insert_on = false;
 			}
 			return CS_SUCCEED;
 			break;
 		case CS_GET:
-			retval = blkdesc->bcpinfo.identity_insert_on == 1 ? CS_TRUE : CS_FALSE ;
+			retval = blkdesc->bcpinfo.identity_insert_on ? CS_TRUE : CS_FALSE ;
 			if (buffer) {
 				memcpy (buffer, &retval, sizeof(retval));
 				if (outlen)
@@ -523,7 +523,7 @@ _blk_rowxfer_out(CS_BLKDESC * blkdesc, CS_INT rows_to_xfer, CS_INT * rows_xferre
 	 * do the query and get to the row data...
 	 */
 
-	if (blkdesc->bcpinfo.xfer_init == 0) {
+	if (!blkdesc->bcpinfo.xfer_init) {
 
 		if (TDS_FAILED(tds_submit_queryf(tds, "select * from %s", tds_dstr_cstr(&blkdesc->bcpinfo.tablename)))) {
 			_ctclient_msg(NULL, CONN(blkdesc), "blk_rowxfer", 2, 5, 1, 140, "");
@@ -540,7 +540,7 @@ _blk_rowxfer_out(CS_BLKDESC * blkdesc, CS_INT rows_to_xfer, CS_INT * rows_xferre
 			return CS_FAIL;
 		}
 
-		blkdesc->bcpinfo.xfer_init = 1;
+		blkdesc->bcpinfo.xfer_init = true;
 	}
 
 	if (rows_xferred)
@@ -595,7 +595,7 @@ _blk_rowxfer_in(CS_BLKDESC * blkdesc, CS_INT rows_to_xfer, CS_INT * rows_xferred
 	 * do the query and get to the row data...
 	 */
 
-	if (blkdesc->bcpinfo.xfer_init == 0) {
+	if (!blkdesc->bcpinfo.xfer_init) {
 
 		/*
 		 * first call the start_copy function, which will
@@ -607,7 +607,7 @@ _blk_rowxfer_in(CS_BLKDESC * blkdesc, CS_INT rows_to_xfer, CS_INT * rows_xferred
 			return CS_FAIL;
 		}
 
-		blkdesc->bcpinfo.xfer_init = 1;
+		blkdesc->bcpinfo.xfer_init = true;
 	} 
 
 	for (each_row = 0; each_row < rows_to_xfer; each_row++ ) {
@@ -709,18 +709,21 @@ _blk_get_col_data(TDSBCPINFO *bulk, TDSCOLUMN *bindcol, int offset)
 	}
 
 	if (!null_column) {
-		CONV_RESULT convert_buffer;
 		CS_DATAFMT_COMMON srcfmt, destfmt;
 		CS_INT desttype;
+		TDS_SERVER_TYPE tds_desttype = TDS_INVALID_TYPE;
 
 		srcfmt.datatype = srctype;
 		srcfmt.maxlength = srclen;
 
-		desttype = _cs_convert_not_client(ctx, bindcol, &convert_buffer, &src);
+		desttype = _cs_convert_not_client(NULL, bindcol, NULL, NULL);
 		if (desttype == CS_ILLEGAL_TYPE)
 			desttype = _ct_get_client_type(bindcol, false);
+		else
+			tds_desttype = bindcol->column_type;
 		if (desttype == CS_ILLEGAL_TYPE)
 			return TDS_FAIL;
+
 		destfmt.datatype  = desttype;
 		destfmt.maxlength = bindcol->on_server.column_size;
 		destfmt.precision = bindcol->column_prec;
@@ -728,8 +731,9 @@ _blk_get_col_data(TDSBCPINFO *bulk, TDSCOLUMN *bindcol, int offset)
 		destfmt.format    = CS_FMT_UNUSED;
 
 		/* if convert return FAIL mark error but process other columns */
-		if ((result = _cs_convert(ctx, &srcfmt, (CS_VOID *) src,
-					 &destfmt, (CS_VOID *) bindcol->bcp_column_data->data, &destlen)) != CS_SUCCEED) {
+		result = _cs_convert(ctx, &srcfmt, (CS_VOID *) src,
+				     &destfmt, (CS_VOID *) bindcol->bcp_column_data->data, &destlen, tds_desttype);
+		if (result != CS_SUCCEED) {
 			tdsdump_log(TDS_DBG_ERROR, "conversion from srctype %d to desttype %d failed\n",
 				    srctype, desttype);
 			return TDS_FAIL;

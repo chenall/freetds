@@ -775,7 +775,7 @@ tds_alloc_locale(void)
 	REQ(i,CSR_PREV) REQ(i,CSR_FIRST) REQ(i,CSR_LAST) REQ(i,CSR_ABS) REQ(i,CSR_REL) \
 	REQ(i,CSR_MULTI) REQ(i,CON_INBAND) REQ(i,PROTO_TEXT) REQ(i,PROTO_BULK) \
 	REQ(i,DATA_SENSITIVITY) REQ(i,DATA_BOUNDARY) REQ(i,PROTO_DYNPROC) REQ(i,DATA_FLTN) \
-	REQ(i,DATA_BITN) REQ(i,DATA_INT8) REQ(i,WIDETABLE) \
+	REQ(i,DATA_BITN) REQ(i,DATA_INT8) REQ(i,DOL_BULK) REQ(i,WIDETABLE) \
 	REQ(i,DATA_UINT2) REQ(i,DATA_UINT4) REQ(i,DATA_UINT8) REQ(i,DATA_UINTN) REQ(i,LARGEIDENT) \
 	REQ(i,SRVPKTSIZE) REQ(i,DATA_DATE) REQ(i,DATA_TIME) REQ(i,DATA_BIGTIME) REQ(i,DATA_BIGDATETIME)
 #define REQ(i,n) |(((TDS_REQ_ ## n / 8) == i)?(1<<(TDS_REQ_ ## n & 7)):0)
@@ -884,7 +884,7 @@ tds_init_login(TDSLOGIN *login, TDSLOCALE * locale)
 }
 
 TDSCURSOR *
-tds_alloc_cursor(TDSSOCKET *tds, const char *name, TDS_INT namelen, const char *query, TDS_INT querylen)
+tds_alloc_cursor(TDSSOCKET *tds, const char *name, size_t namelen, const char *query, size_t querylen)
 {
 	TDSCURSOR *cursor;
 	TDSCURSOR *pcursor;
@@ -1347,7 +1347,7 @@ tds_alloc_socket(TDSCONTEXT * context, unsigned int bufsize)
 #endif /* !ENABLE_ODBC_MARS */
 
 TDSSOCKET *
-tds_realloc_socket(TDSSOCKET * tds, size_t bufsize)
+tds_realloc_socket(TDSSOCKET * tds, unsigned int bufsize)
 {
 	TDSPACKET *packet;
 #if ENABLE_ODBC_MARS
@@ -1901,7 +1901,7 @@ tds_realloc(void **pp, size_t new_size)
 	if (!new_size)
 		new_size = 1;
 
-	/* use malloc if not allocated before, some implementation require it */
+	/* use malloc if not allocated before, some implementations require it */
 	if (*pp)
 		p = realloc(*pp, new_size);
 	else

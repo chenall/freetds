@@ -111,11 +111,14 @@ pool_mbr_login(const TDS_POOL * pool, int tds_version)
 	context = tds_alloc_context(NULL);
 	if (!context) {
 		fprintf(stderr, "Context cannot be null\n");
+		tds_free_login(login);
 		return NULL;
 	}
 	tds = tds_alloc_socket(context, 512);
 	if (!tds) {
 		fprintf(stderr, "tds cannot be null\n");
+		tds_free_context(context);
+		tds_free_login(login);
 		return NULL;
 	}
 	connection = tds_read_config_info(tds, login, context->locale);
@@ -132,6 +135,7 @@ pool_mbr_login(const TDS_POOL * pool, int tds_version)
 	if (pool->database && strlen(pool->database)) {
 		if (strcasecmp(tds->conn->env.database, pool->database) != 0) {
 			fprintf(stderr, "changing database failed\n");
+			pool_mbr_free_socket(tds);
 			return NULL;
 		}
 	}
@@ -334,7 +338,7 @@ pool_process_data(TDS_POOL *pool, TDS_POOL_MEMBER *pmbr)
 			break;
 	}
 	if (puser && !puser->sock.poll_send)
-		tds_socket_flush(tds_get_s(puser->sock.tds));
+		tds_connection_flush(puser->sock.tds);
 	return true;
 }
 

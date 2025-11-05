@@ -15,7 +15,7 @@ Test(void)
 	SQLUSMALLINT statuses[ROWS];
 	SQLULEN num_row;
 
-	int i;
+	SQLLEN i;
 	SQLRETURN RetCode;
 
 	odbc_reset_statement();
@@ -76,10 +76,9 @@ Init(void)
 
 }
 
-int
-main(void)
+TEST_MAIN()
 {
-	odbc_use_version3 = 1;
+	odbc_use_version3 = true;
 	odbc_connect();
 
 	odbc_check_cursor();

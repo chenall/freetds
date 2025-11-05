@@ -32,10 +32,9 @@
 
 #include <freetds/utils.h>
 
-char *UNITTEST;
-
 #if HAVE_FSTAT && defined(S_IFSOCK)
 
+static char *UNITTEST;
 static int end_socket = -1;
 
 static int
@@ -140,8 +139,7 @@ test(int close_socket)
 	return 0;
 }
 
-int
-main(int argc, char **argv)
+TEST_MAIN()
 {
 	UNITTEST = argv[0];
 	read_login_info(argc, argv);
@@ -151,8 +149,7 @@ main(int argc, char **argv)
 }
 
 #else
-int
-main(void)
+TEST_MAIN()
 {
 	fprintf(stderr, "Not possible for this platform.\n");
 	return 0;

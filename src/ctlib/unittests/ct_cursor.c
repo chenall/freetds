@@ -2,8 +2,7 @@
 
 static int update_second_table(CS_COMMAND * cmd2, char *value);
 
-int
-main(void)
+TEST_MAIN()
 {
 	CS_CONTEXT *ctx;
 	CS_CONNECTION *conn;
@@ -16,7 +15,7 @@ main(void)
 	CS_DATAFMT datafmt;
 	CS_SMALLINT ind;
 	int verbose = 1;
-	CS_CHAR name[3]; 
+	CS_CHAR name[3];
 	CS_CHAR col1[6];
 	CS_INT datalength;
 	CS_CHAR text[128];
@@ -49,9 +48,9 @@ main(void)
 
 	check_call(ct_cursor, (cmd, CS_CURSOR_DECLARE, name, CS_NULLTERM, text, CS_NULLTERM, CS_UNUSED));
 
-	check_call(ct_cursor, (cmd, CS_CURSOR_ROWS, name, CS_NULLTERM, NULL, CS_UNUSED, (CS_INT) 1));
+	check_call(ct_cursor, (cmd, CS_CURSOR_ROWS, NULL, CS_UNUSED, NULL, CS_UNUSED, (CS_INT) 1));
 
-	check_call(ct_cursor, (cmd, CS_CURSOR_OPEN, name, CS_NULLTERM, text, CS_NULLTERM, CS_UNUSED));
+	check_call(ct_cursor, (cmd, CS_CURSOR_OPEN, NULL, CS_UNUSED, NULL, CS_UNUSED, CS_UNUSED));
 
 	check_call(ct_send, (cmd));
 
@@ -66,7 +65,7 @@ main(void)
 
 		case CS_CURSOR_RESULT:
 
-			check_call(ct_cmd_props, (cmd, CS_GET, CS_CUR_STATUS, &props_value, sizeof(CS_INT), NULL)); 
+			check_call(ct_cmd_props, (cmd, CS_GET, CS_CUR_STATUS, &props_value, CS_UNUSED, NULL));
 			if (props_value & CS_CURSTAT_DECLARED) {
 				fprintf(stderr, "ct_cmd_props claims cursor is in DECLARED state when it should be OPEN\n");
 				return 1;
@@ -149,7 +148,7 @@ main(void)
 	}
 
 
-	check_call(ct_cursor, (cmd, CS_CURSOR_CLOSE, name, CS_NULLTERM, NULL, CS_UNUSED, CS_DEALLOC));
+	check_call(ct_cursor, (cmd, CS_CURSOR_CLOSE, NULL, CS_UNUSED, NULL, CS_UNUSED, CS_DEALLOC));
 
 	check_call(ct_send, (cmd));
 
@@ -164,7 +163,7 @@ main(void)
 		return 1;
 	}
 
-	check_call(ct_cmd_props, (cmd, CS_GET, CS_CUR_STATUS, &props_value, sizeof(CS_INT), NULL)); 
+	check_call(ct_cmd_props, (cmd, CS_GET, CS_CUR_STATUS, &props_value, CS_UNUSED, NULL));
 
 	if (props_value != CS_CURSTAT_NONE) {
 		fprintf(stderr, "ct_cmd_props() CS_CUR_STATUS != CS_CURSTAT_NONE \n");
@@ -192,7 +191,7 @@ main(void)
 		return 1;
 	}
 
-	check_call(ct_cursor, (cmd, CS_CURSOR_ROWS, name, 3, NULL, CS_UNUSED, (CS_INT) 1));
+	check_call(ct_cursor, (cmd, CS_CURSOR_ROWS, NULL, CS_UNUSED, NULL, CS_UNUSED, (CS_INT) 1));
 
 	check_call(ct_send, (cmd));
 
@@ -207,7 +206,7 @@ main(void)
 		return 1;
 	}
 
-	check_call(ct_cursor, (cmd, CS_CURSOR_OPEN, name, 3, text, 26, CS_UNUSED));
+	check_call(ct_cursor, (cmd, CS_CURSOR_OPEN, NULL, CS_UNUSED, NULL, CS_UNUSED, CS_UNUSED));
 
 	check_call(ct_send, (cmd));
 
@@ -291,7 +290,7 @@ main(void)
 	}
 
 
-	check_call(ct_cursor, (cmd, CS_CURSOR_CLOSE, name, 3, NULL, CS_UNUSED, CS_UNUSED));
+	check_call(ct_cursor, (cmd, CS_CURSOR_CLOSE, NULL, CS_UNUSED, NULL, CS_UNUSED, CS_UNUSED));
 
 	check_call(ct_send, (cmd));
 
@@ -305,7 +304,7 @@ main(void)
 		fprintf(stderr, "ct_results() returned BAD.\n");
 		return 1;
 	}
-	check_call(ct_cursor, (cmd, CS_CURSOR_DEALLOC, name, 3, NULL, CS_UNUSED, CS_UNUSED));
+	check_call(ct_cursor, (cmd, CS_CURSOR_DEALLOC, NULL, CS_UNUSED, NULL, CS_UNUSED, CS_UNUSED));
 
 	check_call(ct_send, (cmd));
 
@@ -414,20 +413,10 @@ update_second_table(CS_COMMAND * cmd2, char *value)
 	CS_CHAR text[128];
 
 	sprintf(text, "update #test_table2 set col1 = '%s' ", value);
-	ret = run_command(cmd2, text);
-	if (ret != CS_SUCCEED)
-		return 1;
+	check_call(run_command, (cmd2, text));
 
-	ret = ct_command(cmd2, CS_LANG_CMD, "select col1 from #test_table2", CS_NULLTERM, CS_UNUSED);
-	if (ret != CS_SUCCEED) {
-		fprintf(stderr, "ct_command() failed\n");
-		return 1;
-	}
-	ret = ct_send(cmd2);
-	if (ret != CS_SUCCEED) {
-		fprintf(stderr, "ct_send() failed\n");
-		return 1;
-	}
+	check_call(ct_command, (cmd2, CS_LANG_CMD, "select col1 from #test_table2", CS_NULLTERM, CS_UNUSED));
+	check_call(ct_send, (cmd2));
 	while ((results_ret = ct_results(cmd2, &result_type)) == CS_SUCCEED) {
 		switch ((int) result_type) {
 		case CS_CMD_SUCCEED:
@@ -443,11 +432,7 @@ update_second_table(CS_COMMAND * cmd2, char *value)
 			datafmt.maxlength = 6;
 			datafmt.count = 1;
 			datafmt.locale = NULL;
-			ret = ct_bind(cmd2, 1, &datafmt, col1, &datalength, &ind);
-			if (ret != CS_SUCCEED) {
-				fprintf(stderr, "ct_bind() failed\n");
-				return 1;
-			}
+			check_call(ct_bind, (cmd2, 1, &datafmt, col1, &datalength, &ind));
 
 			while (((ret = ct_fetch(cmd2, CS_UNUSED, CS_UNUSED, CS_UNUSED, &count)) == CS_SUCCEED)
 			       || (ret == CS_ROW_FAIL)) {

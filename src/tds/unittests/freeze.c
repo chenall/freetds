@@ -32,6 +32,7 @@
 #include <freetds/replacements.h>
 #include <freetds/utils.h>
 
+#ifdef TDS_HAVE_MUTEX
 #ifdef _WIN32
 #define SHUT_WR SD_SEND
 #endif
@@ -193,8 +194,7 @@ static void
 test1(void)
 {
 	TDSFREEZE outer, inner;
-	size_t written;
-	unsigned left;
+	unsigned written, left;
 
 	/* just to not start at 0 */
 	append("test", 4);
@@ -461,8 +461,7 @@ test(int mars, void (*real_test)(void))
 	buf_free(&thread_buf);
 }
 
-int
-main(void)
+TEST_MAIN()
 {
 	int mars;
 
@@ -485,3 +484,10 @@ main(void)
 
 	return 0;
 }
+#else	/* !TDS_HAVE_MUTEX */
+TEST_MAIN()
+{
+	printf("Not possible for this platform.\n");
+	return 0; /* TODO 77 ? */
+}
+#endif

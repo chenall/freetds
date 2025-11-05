@@ -45,8 +45,7 @@ free_convert(int type, CONV_RESULT *cr)
 	}
 }
 
-int
-main(int argc, char **argv)
+TEST_MAIN()
 {
 	int srctype;
 	int desttype;
@@ -214,9 +213,10 @@ main(int argc, char **argv)
 				break;
 			}
 			assert(src);
-			srclen = strlen(src);
+			srclen = (TDS_UINT) strlen(src);
 			break;
 		case SYBINT1:
+		case SYBSINT1:
 		case SYBUINT1:
 			src = (char *) &tds_tinyint;
 			srclen = sizeof(tds_tinyint);

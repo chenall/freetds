@@ -27,8 +27,7 @@ check_contains(const char *value, const char *expected)
 	fprintf(stderr, "Wrong value, got \"%s\" expected to contains \"%s\"\n", value, expected);
 }
 
-int
-main(int argc, char **argv)
+TEST_MAIN()
 {
 	LOGINREC *login;
 	DBPROCESS *dbproc;
@@ -85,12 +84,15 @@ main(int argc, char **argv)
 
 		if (n_col == 1) {
 			check_is(col2.Name, "number");
+			check_is(col2.ActualName, "is_an_int");
 			check_contains(col2.TableName, "#colinfo_table");
 		} else if (n_col == 2) {
 			check_is(col2.Name, "is_a_string");
+			check_is(col2.ActualName, "is_a_string");
 			check_contains(col2.TableName, "#colinfo_table");
 		} else if (n_col == 3) {
 			check_is(col2.Name, "dollars");
+			check_is(col2.ActualName, "is_a_money");
 			check_contains(col2.TableName, "#test_table");
 		}
 	}

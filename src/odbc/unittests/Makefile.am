@@ -84,6 +84,8 @@ TESTS =	\
 	connection_string_parse$(EXEEXT) \
 	tvp$(EXEEXT) \
 	tokens$(EXEEXT) \
+	describeparam$(EXEEXT) \
+	reexec$(EXEEXT) \
 	$(NULL)
 
 check_PROGRAMS	=	$(TESTS) oldpwd$(EXEEXT)
@@ -93,7 +95,11 @@ t0002_SOURCES	=	t0002.c
 t0003_SOURCES	=	t0003.c
 moreresults_SOURCES	=	moreresults.c
 connect_SOURCES	=	connect.c
+if FAST_INSTALL
+connect_LDFLAGS = $(GLOBAL_LD_ADD) -no-fast-install
+else
 connect_LDFLAGS = $(GLOBAL_LD_ADD) -no-install
+endif
 print_SOURCES	=	print.c
 date_SOURCES	=	date.c
 norowset_SOURCES	= norowset.c
@@ -154,7 +160,8 @@ cursor7_SOURCES	= cursor7.c
 utf8_SOURCES	= utf8.c common.c
 # this test cannot work using wide characters as use UTF-8 and single byte encoding
 utf8_CPPFLAGS	=	$(GLOBAL_CPPFLAGS)
-utf8_LDADD	=	$(ODBC_LDFLAGS) $(NETWORK_LIBS) $(ODBCINST_LDFLAGS)
+utf8_LDADD	=	../../utils/unittests/libtds_test_base.a \
+			$(ODBC_LDFLAGS) ../../replacements/libreplacements.la $(NETWORK_LIBS) $(ODBCINST_LDFLAGS)
 utf8_2_SOURCES	= utf8_2.c
 utf8_3_SOURCES	= utf8_3.c
 utf8_4_SOURCES	= utf8_4.c
@@ -182,25 +189,30 @@ connection_string_parse_SOURCES = connection_string_parse.c
 connection_string_parse_CPPFLAGS = $(GLOBAL_CPPFLAGS)
 connection_string_parse_LDFLAGS = -static ../libtdsodbc.la ../../tds/unittests/libcommon.a -shared $(GLOBAL_LD_ADD)
 tokens_SOURCES	= tokens.c
-tokens_LDADD = libcommon.a $(ODBC_LDFLAGS) ../../replacements/libreplacements.la ../../server/libtdssrv.la $(GLOBAL_LD_ADD)
+tokens_LDADD = ../../utils/unittests/libtds_test_base.a \
+		libcommon.a $(ODBC_LDFLAGS) ../../replacements/libreplacements.la \
+		../../server/libtdssrv.la $(GLOBAL_LD_ADD)
+reexec_SOURCES = reexec.c
 
 noinst_LIBRARIES = libcommon.a
 libcommon_a_SOURCES = common.c common.h c2string.c parser.c parser.h \
 	fake_thread.c fake_thread.h
 
 GLOBAL_CPPFLAGS	=	-I$(top_srcdir)/include $(ODBC_INC) -DFREETDS_TOPDIR=\"$(top_srcdir)\"
-GLOBAL_LD_ADD =	$(NETWORK_LIBS) $(ODBCINST_LDFLAGS)
+GLOBAL_LD_ADD =	$(NETWORK_LIBS) $(ODBCINST_LDFLAGS) $(LTLIBICONV)
 AM_CPPFLAGS	=	$(GLOBAL_CPPFLAGS)
 if ODBC_WIDE_TESTS
 AM_CPPFLAGS	+=	-DUNICODE -D_UNICODE
 endif
 
-if MINGW32
+if FAST_INSTALL
 AM_LDFLAGS	=	-no-fast-install
 else
 AM_LDFLAGS	=	-no-install -L../.libs -R "$(abs_builddir)/../.libs"
 endif
-LDADD		=	libcommon.a $(ODBC_LDFLAGS) ../../replacements/libreplacements.la $(GLOBAL_LD_ADD)
+LDADD		=	libcommon.a ../../utils/unittests/libtds_test_base.a \
+			$(ODBC_LDFLAGS) ../../replacements/libreplacements.la \
+			$(GLOBAL_LD_ADD)
 DISTCLEANFILES	=	odbc.ini odbcinst.ini
 EXTRA_DIST	=	CMakeLists.txt
 

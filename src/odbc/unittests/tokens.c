@@ -41,17 +41,11 @@ static void parse_sql(TDSSOCKET * tds, const char *sql);
 static void
 setup_override(void)
 {
-	char buf[128];
-	FILE *f;
+	assert(common_pwd.initialized);
+	strcpy(common_pwd.user, "guest");
+	strcpy(common_pwd.password, "sybase");
+	strcpy(common_pwd.database, "tempdb");
 
-	sprintf(buf, "tokens_pwd.%d", (int) getpid());
-	f = fopen(buf, "w");
-	assert(f);
-	fprintf(f, "UID=guest\nPWD=sybase\nSRV=%s\nDB=tempdb\n", odbc_server);
-	fclose(f);
-	rename(buf, "tokens_pwd");
-	unlink(buf);
-	setenv("TDSPWDFILE", "tokens_pwd", 1);
 	unsetenv("TDSINIOVERRIDE");
 
 	unsetenv("TDSHOST");
@@ -221,7 +215,7 @@ read_line(void *param, char *s, size_t size)
 		return NULL;
 	end = strchr(start, '\n');
 	end = end ? end + 1 : strchr(start, 0);
-	len = end - start;
+	len = (size_t) (end - start);
 	if (len >= size) {
 		fprintf(stderr, "Line too long\n");
 		exit(1);
@@ -393,8 +387,7 @@ test_fetch(const char *replies, const char *expected_no_row, const char *expecte
 
 #define test_fetch(r, e1, e2) test_fetch(r, e1, e2, __LINE__)
 
-int
-main(void)
+TEST_MAIN()
 {
 	int port;
 	char connect[100];
@@ -410,11 +403,12 @@ main(void)
 	}
 	printf("Fake server bound at port %d\n", port);
 
+	/* Get SRV from user's PWD config then override UID/PWD/DB */
 	odbc_read_login_info();
 	setup_override();
 
-	odbc_use_version3 = 1;
-	sprintf(connect, "SERVER=127.0.0.1,%d;TDS_Version=7.3;UID=guest;PWD=sybase;DATABASE=tempdb;Encrypt=No;", port);
+	odbc_use_version3 = true;
+	sprintf(connect, "SERVER=127.0.0.1,%d;TDS_Version=7.3;Encrypt=No;", port);
 	odbc_conn_additional_params = connect;
 	odbc_connect();
 
@@ -488,7 +482,7 @@ main(void)
 
 	odbc_disconnect();
 
-	odbc_use_version3 = 0;
+	odbc_use_version3 = false;
 	odbc_connect();
 
 	/*
@@ -561,8 +555,7 @@ main(void)
 }
 
 #else /* !TDS_HAVE_MUTEX */
-int
-main(void)
+TEST_MAIN()
 {
 	printf("Not possible for this platform.\n");
 	odbc_test_skipped();

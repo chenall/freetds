@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding='UTF-8'?>
+<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE book PUBLIC "-//OASIS//DTD DocBook XML V4.2//EN"
   "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd" [
 	<!ENTITY dblibapixml SYSTEM "dblib.api.xml">
@@ -13,7 +13,7 @@
 	<!ENTITY odbc  '<systemitem class="library">ODBC</systemitem>'> 
 	<!ENTITY iODBC '<systemitem class="library">iODBC</systemitem>'>
 	<!ENTITY unixODBC '<systemitem class="library">unixODBC</systemitem>'>
-	<!ENTITY version "1.4">
+	<!ENTITY version "1.5">
 	<!ENTITY freetdsconf "<filename>freetds.conf</filename>">
 ]>
 <book>
@@ -58,6 +58,8 @@
 		<year>2021</year>
 		<year>2022</year>
 		<year>2023</year>
+		<year>2024</year>
+		<year>2025</year>
 		<holder>Frediano Ziglio</holder>
 		</copyright>
 	<legalnotice><para>Permission is granted to copy, distribute and/or modify this document
@@ -70,7 +72,7 @@
 		</legalnotice>
 	</bookinfo>
 
-<toc></toc>
+<toc/>
 <!-- nettiquette quoting: https://www.netmeister.org/news/learn2quote.html -->
 <!-- ////////////////// CHAPTER /////////////////////// -->
 <preface id="about"><title>About this User Guide</title>
@@ -82,16 +84,16 @@
 <para>This guide is here for you, and we hope that you will be here for it, that others might benefit from your experience or inexperience.  The most recent version <footnote>
 
 <para>The version you're reading is:</para>
-			<simplelist type='vert'>
+			<simplelist type="vert">
 				<member>&ug.date;</member>
 				<member>&ug.id;</member>
 				</simplelist>
 			</footnote>
 		can be found on the &freetds;
-		<ulink url="https://www.freetds.org/userguide/">web site</ulink>, where you will also find the most up to date
-		<ulink url="https://www.freetds.org/faq.html">FAQ</ulink>, as well as links to the anonymous and browseable git repository.
+		<ulink url="https://www.freetds.org/userguide/">web site</ulink>, where you will also find
+		links to the anonymous and browseable git repository.
 		If you find something wrong, unclear, badly put, misleading, or incorrigible, I hope you will let us know.
-		Post your musings or rants to the mailing list (see <link linkend="contrib">Helping</link>).
+		Post your musings or rants to the GitHub project (see <link linkend="contrib">Helping</link>).
 		Patches to <filename>doc/userguide.xml</filename> are especially welcome, of course.
 		By taking the time let us know what you think, perhaps the path to enlightenment will be made a little smoother for the fellow behind you.</para>
 
@@ -140,7 +142,13 @@ The <quote>TDS</quote> part of the name comes from name of the protocol used to 
 
 <para>&ctlib;, &dblib;, and &odbc; are <acronym>API</acronym>s that &mdash; however different their programming style may be &mdash; all communicate with the server in the same way.  The language they use is <acronym>TDS</acronym>.</para>
 
-<para>The <acronym>TDS</acronym> protocol comes in several flavors, most of which were not openly documented.  If anything, it was considered to be something like a trade secret, or at least proprietary technology.  The exception is <acronym>TDS</acronym> 5.0, used exclusively by Sybase, for which documentation is available <ulink url="http://crm.sybase.com/sybase/www/ESD/tds_spec_download.jsp">from Sybase</ulink>.</para>
+<para>The <acronym>TDS</acronym> protocol comes in several flavors.
+The <acronym>TDS</acronym> protocol was considered to be something like a trade secret, or at least proprietary technology.
+<acronym>TDS</acronym> 5.0 protocol, used exclusively by Sybase, is available
+<ulink url="http://crm.sybase.com/sybase/www/ESD/tds_spec_download.jsp">from Sybase</ulink>.
+You can find Microsoft <acronym>TDS</acronym> protocol specification at
+<ulink url="https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-tds/b46a581a-39de-4745-b076-ec4dbb7d13ec">Microsoft Learn website</ulink>.
+</para>
 		</sect1>
 	
 	<sect1 id="tdshistory">
@@ -179,7 +187,8 @@ The <quote>TDS</quote> part of the name comes from name of the protocol used to 
 			<varlistentry>
 				<term>TDS 7.2 Microsoft</term>
 				<term><emphasis>was</emphasis> 9.0</term>
-				<listitem><para>Introduced for <productname>SQL Server 2005</productname>.  Includes support for varchar(max), varbinary(max), xml datatypes and MARS.</para></listitem>
+				<listitem><para>Introduced for <productname>SQL Server 2005</productname>.
+				Includes support for varchar(max), varbinary(max), XML datatypes and MARS.</para></listitem>
 				</varlistentry>
 
 			<varlistentry>
@@ -216,7 +225,7 @@ The <quote>TDS</quote> part of the name comes from name of the protocol used to 
 Please see the <filename>AUTHORS.md</filename> in the distribution for a (we hope) complete list.</para>
 		</sect1>
 	<sect1 id="projects">
-		<title>Current Projects, Language Bindings, and Alternatives</title>
+		<title>Current Projects, Language Bindings</title>
 		<sect2 id="Current">
 			<title>Current Projects</title>
 
@@ -244,56 +253,21 @@ Please see the <filename>AUTHORS.md</filename> in the distribution for a (we hop
 
 <para>How big is it?  &freetds; has over 100,000 lines of C code, maintained by a handful of developers.
 	Patches arrive irregularly, varying in size from one-liners to thousand-line monsters.
-	Almost all are applied or used in some way.  The mailing list has some 600 or so subscribers at this writing.
+	Almost all are applied or used in some way.
 	Safe to say, &freetds;'s success so far lies somewhere between the Beetle and the Edsel.</para>
 
 <para>Who uses it?  Oh, pretty much everyone.  &freetds; users number in the tens of thousands.
 	It's used by large corporations, by the U.S. federal government
 	(e.g. <ulink url="https://ncbi.github.io/cxx-toolkit/pages/ch_dbapi">Database Access Library</ulink> at the
-	National Center for Biotechnology Information) and, judging by the mailing list, by many webservers running Apache and PHP.
+	National Center for Biotechnology Information) and by many webservers running Apache and PHP.
 	Sybase recommends &freetds; for their EAServer product.
-	Microsoft recommends &freetds; to their customers who want access to Microsoft SQL Server from non-Win32 clients.  So do we.</para>
+	Microsoft recommended &freetds; to their customers who want access to Microsoft SQL Server from non-Win32 clients.
+	So do we.</para>
 			</sect2>
 		<sect2 id="Languages">
 			<title>Languages besides C</title>
 
 <para>You may be wondering how these libraries fit with Perl, PHP, TCL, Python, or other popular scripting languages.  Most of these languages have bindings to Sybase that use either the &dblib; or &ctlib; <acronym>API</acronym>, for which &freetds; is intended as a drop-in replacement.  For instance, Michael Peppler's <systemitem class="library">DBD::Sybase</systemitem> works very well using &freetds; to access Sybase or Microsoft <productname>SQL Server</productname>s.  <productname>PHP</productname> has options for <filename>sybase</filename> (&dblib;) and <filename>sybase-ct</filename> (&ctlib;) <acronym>API</acronym>s.</para>
-			</sect2>
-		<sect2 id="alternatives">
-			<title>Alternatives</title>
-			<variablelist id="tab.alternatives">
-				<title>Should &freetds; not suit your needs, some alternatives</title>
-				<varlistentry>
-					<term>jTDS</term>
-					<listitem><para>If Java is your game, we refer you to the
-						<ulink url="https://sourceforge.net/projects/jtds/">jTDS</ulink>
-						project on SourceForge.  It is a fork of the
-						<productname>FreeTDS/JDBC</productname> project, by Craig Spannring, and is a free, native 100% Java implementation of a Type 4  <acronym>JDBC</acronym> driver.</para>
-						</listitem>
-					</varlistentry>
-				<varlistentry>
-					<term>Sybase OpenClient</term>
-					<listitem>
-
-<para>In the time since &freetds; was started, Sybase (as well as most major <acronym>DBMS</acronym> vendors) has released its database for the Intel <productname><acronym>GNU</acronym>/Linux</productname> platform.  The good: it is a solid product and supports <acronym>TDS</acronym> 4.2 and <acronym>TDS</acronym> 5.0.  The bad: it doesn't support <acronym>TDS 7.0</acronym> or Linux/*BSD on non-Intel platforms.  The ugly: Microsoft broke date handling for big endian Sybase clients.</para>
-
-<para>Depending on platform, it may cost something.</para>
-						</listitem>
-					</varlistentry>
-				<varlistentry>
-					<term>&odbc; bridge products</term>
-					<listitem><para>They use the &odbc; driver on the NT box where your <productname>SQL Server</productname> runs so you'll never have trouble with new protocols and the like.  On the downside, they can be costly and may be inefficient.
-					We know of <productname>EasySoft ODBC-ODBC Bridge</productname> from <ulink url="https://www.easysoft.com">EasySoft</ulink>,
-					<productname>Universal Data Access Driver</productname> from <ulink url="https://www.openlinksw.com">OpenLink Software</ulink>,
-					and <application>&odbc; Router</application> from <ulink url="https://www.augsoft.com/">August Software</ulink> Corporation.</para>
-						</listitem>
-					</varlistentry>
-				<varlistentry>
-					<term>DBD::Proxy</term>
-					<listitem><para>We have no direct experience with this Perl-only option.  It has the same caveats as an &odbc; bridge except it's free.</para>
-						</listitem>
-					</varlistentry>
-				</variablelist>
 			</sect2>
 		</sect1>
 	</chapter>
@@ -311,9 +285,9 @@ Please see the <filename>AUTHORS.md</filename> in the distribution for a (we hop
 <para>&freetds; uses <acronym>GNU</acronym> <application>Autoconf</application>, <application>Automake</application>, and <application>libtool</application><footnote>
 		<itemizedlist spacing="compact">
 			<title>Versions used for this release</title>
-			<listitem><para>autoconf (GNU Autoconf) 2.69</para></listitem>
-			<listitem><para>automake (GNU automake) 1.16.1</para></listitem>
-			<listitem><para>ltmain.sh (GNU libtool) 2.4.6</para></listitem>
+			<listitem><para>autoconf (GNU Autoconf) 2.72</para></listitem>
+			<listitem><para>automake (GNU automake) 1.17</para></listitem>
+			<listitem><para>ltmain.sh (GNU libtool) 2.5.4</para></listitem>
 			</itemizedlist>
 	</footnote> to increase portability.</para>
 
@@ -321,7 +295,9 @@ Please see the <filename>AUTHORS.md</filename> in the distribution for a (we hop
 If you're familiar with the <acronym>GNU</acronym> system, you can probably just download the tarball and get away with scanning the <filename>README.md</filename> impatiently and then following your instincts.
 Because everyone is a beginner once and no one is an expert at everything, we'll try to explain things in plain English where possible, and to define our terms as we go along.</para>
 
-<para>If the following nevertheless reads like gibberish, you might very well want to use something prepackaged (see <link linkend="alternatives">Alternatives</link>).  If it reads like a vaguely intelligible alien script that might yield to intensive research, we've included links to some of the usual suspects at the end of this chapter.  If it reads like a bad explanation of something you could explain better, please send us your version!</para>
+<para>If it reads like a vaguely intelligible alien script that might yield to intensive research, we've included links to some
+of the usual suspects at the end of this chapter.
+If it reads like a bad explanation of something you could explain better, please send us your version!</para>
 		</sect1>
 	<sect1 id="packages">
 		<title>What to build: Packages, Tarballs, and the <productname>git</productname> repository</title>
@@ -341,14 +317,17 @@ Because everyone is a beginner once and no one is an expert at everything, we'll
 			<ulink url="https://www.freetds.org/files/current/freetds-current.tgz">www.freetds.org</ulink>.</para>
 
 <para>In general, the <productname>git</productname> master branch (the basis of the current nightly snapshot) works better and has more functionality than the release version.  Bugs sometimes persist in the release version but are usually fixed in short order (once identified) in <productname>git</productname> master.</para>
-		<tip><para>As with any project of this sort, if you want to use the <productname>git</productname> master branch, it's a good idea to join the mailing list.
-</para></tip>
 		</sect1>
 	<sect1 id="config">
 		<title>How to build: Configure and make</title>
 
 <para>If you've built other <acronym>GNU</acronym> projects, building &freetds; is a fairly straightforward process. We have a terse and verbose description.</para>
-		<note><para>&freetds;  is known to build with <acronym>GNU</acronym> and <acronym>BSD</acronym> <application>make</application>.  If you encounter a large number of build errors, and your operating system's <application>make</application> is not <acronym>GNU</acronym> <application>make</application> (as is the case on most non-<acronym>GNU</acronym>/Linux systems), you may wish to install <acronym>GNU</acronym> <application>make</application> from <ulink url="ftp://ftp.gnu.org/gnu/make/">ftp.gnu.org</ulink>.
+		<note><para>&freetds;  is known to build with <acronym>GNU</acronym> and <acronym>BSD</acronym>
+		<application>make</application>.
+		If you encounter a large number of build errors, and your operating system's <application>make</application>
+		is not <acronym>GNU</acronym> <application>make</application> (as is the case on most
+		non-<acronym>GNU</acronym>/Linux systems), you may wish to install <acronym>GNU</acronym>
+		<application>make</application> from <ulink url="https://ftp.gnu.org/gnu/make/">ftp.gnu.org</ulink>.
 </para></note>
 		<sect2 id="Experts"><title>For Experts</title>
 <screen>
@@ -410,7 +389,9 @@ Cf. <link linkend="withOdbcNoDM"><option>--with-odbc-nodm</option></link>.</para
 						<term><option>--with-libiconv-prefix=<replaceable>DIR</replaceable>
 							</option></term>
 						<listitem><para>Specifies the location of the iconv library to use.  <command>configure</command> will search for libiconv in the usual places; use <option>--with-libiconv-prefix</option>  if it's unsuccessful (assuming you want to use iconv, of course).  Overridden by <option>--disable-libiconv</option>, below.</para>
-<para>Version 0.95 removed support for iconv which cannot convert from any encoding to any encoding. This affect potentially systems like Tru64 and HP-UX were iconv mainly convert from/to ucs2. It's recommended to use GNU libiconv in this case.</para>
+<para>Version 0.95 removed support for iconv which cannot convert from any encoding to any encoding.
+This affect potentially systems like Tru64, HP-UX or Solaris were iconv mainly convert from/to UCS2.
+It's recommended to use GNU libiconv in this case.</para>
 							</listitem>
 						</varlistentry>
 					<varlistentry>
@@ -489,12 +470,17 @@ Cf. <link linkend="withOdbcNoDM"><option>--with-odbc-nodm</option></link>.</para
 						<term><option>--disable-threadsafe</option></term>
 						<listitem><para>Force &freetds; not to use threadsafe versions of functions such as <function>gethostbyname_r()</function> where available.  Rely instead on the older and non-threadsafe ones such as <function>gethostbyname()</function>. <command>configure</command> tests some of these functions.  If the tests are successful, &freetds; will use threadsafe functions throughout.</para>
 
-<para>Threadsafe operation has been tested on Linux, FreeBSD, HP-UX and Windows.  It should work on Solaris, Tru64, and (reportedly) IRIX.  Not expected to work on non-unixy systems.  Should not be used if your system supports threads. Pool server and MARS won't work if disabled.</para>
+<para>Threadsafe operation has been tested on Linux, FreeBSD, HP-UX and Windows.
+It should work on Solaris, Tru64, and (reportedly) IRIX.
+Not expected to work on non-unixy systems beside Windows.
+Should not be used if your system supports threads.
+Pool server and MARS won't work if disabled.</para>
 							</listitem>
 						</varlistentry>
 					<varlistentry>
 						<term><option>--disable-debug</option></term>
-						<listitem><para>Debug-mode compiles are enabled by default, and will remain so at least until version 1.0.  You can speed things up ever so slightly by disabling it.
+						<listitem><para>Debug-mode compiles are enabled by default.
+You can speed things up ever so slightly by disabling it.
 </para></listitem>
 						</varlistentry>
 					<varlistentry>
@@ -632,13 +618,13 @@ Once project files are created you can open them with your environment.</para>
 
 <para>You can  download FreeTDS binaries for Windows from AppVeyor (the hosted CI platform used).</para>
 
-<para>There is a .zip file available as artifact of every sucessful build.
+<para>There is a .zip file available as artifact of every successful build.
 
 The list of builds is at
 <ulink url="https://ci.appveyor.com/project/FreeTDS/freetds/history">https://ci.appveyor.com/project/FreeTDS/freetds/history</ulink>.
 
-You can find there builds of code in the master banch and (from time to
-time) builds from the post-1.4 release fixes-only Branch-1_4 branch.
+You can find there builds of code in the master branch and (from time to
+time) builds from the post-1.5 release fixes-only Branch-1_5 branch.
 Every build matrix element generates its artifact.</para>
 				</sect3>
 
@@ -689,39 +675,6 @@ and register the driver as a standard component.</para>
 				
 				</sect3>
 			</sect2>
-		<sect2 id="osx"><title>OS X&reg;</title>
-
-<para>The regular distribution compiles on OS X.</para>
-			
-			<sect3 id="OSX.Build.LinkIssues">
-				<title>Possible linker problems</title>
-<para>On 18 April 2016, a problem was reported causing linker issues.
-<screen>
-	Undefined symbols for architecture x86_64:
-
-	  "___strlcpy_chk", referenced from:
-	      _tdsdbopen in libsybdb_64.a(dblib.o)
-	      _db_env_chg in libsybdb_64.a(dblib.o)
-	      _dbcolinfo in libsybdb_64.a(dblib.o)
-	      _dbtablecolinfo in libsybdb_64.a(dblib.o)
-	      _tds_alloc_dynamic in libsybdb_64.a(mem.o)
-	      _tds7_get_instance_port in libsybdb_64.a(net.o)
-	      _tds_get_locale in libsybdb_64.a(locale.o)
-	      ...
-</screen>
-</para>
-<para>
-This is due to some mismatch on different project releases. To solve these issue set the target release like
-<screen>	<userinput>CFLAGS="-mmacosx-version-min=10.8" ./configure
-	make</userinput></screen>
-or
-<screen>	<userinput>export MACOSX_DEPLOYMENT_TARGET=10.8
-	./configure
-	make</userinput></screen>
-</para>
-
-				</sect3>
-			</sect2>
 		
 		<sect2 id="AIX"><title>AIX&reg;</title>
 
@@ -729,8 +682,17 @@ or
 				can be a shared library.  One solution is to build only static libraries with the <option>--disable-shared</option>
 				configure option.</para>
 
-<para>Another problem seems to be that the linker isn't asked to pull in all the requisite libraries.  Cf. this helpful
-				<ulink url="https://lists.ibiblio.org/pipermail/freetds/2004q3/016748.html">mailing list message</ulink>.</para>
+<para>Another problem seems to be that the linker isn't asked to pull in all the requisite libraries.
+Cf. this helpful <ulink url="https://lists.ibiblio.org/sympa/arc/freetds/2004-09/thrd4.html">mailing list message</ulink>.</para>
+			</sect2>
+
+			<sect2 id="Solaris"><title>Solaris and related</title>
+
+<para>It looks like system iconv has some issue on Solaris.
+Try to use GNU iconv.</para>
+
+<para>For more information looks at <ulink url="https://github.com/FreeTDS/freetds/discussions/496">this discussion</ulink>.</para>
+
 			</sect2>
 		
 		<sect2 id="RPM"><title>GNU/Linux distributions that use RPMs</title>
@@ -739,7 +701,7 @@ or
 				know it is easily done:
 				
 <screen>
-	<prompt>$ </prompt><userinput>rpmbuild -ta freetds-1.4.tar.bz2</userinput></screen></para>
+	<prompt>$ </prompt><userinput>rpmbuild -ta freetds-1.5.tar.bz2</userinput></screen></para>
 			</sect2>
 	
 		</sect1>
@@ -754,11 +716,18 @@ or
 <para>If you install it they will stay?</para>
 		</epigraph>
 
-<para></para>
+<para/>
 	<note><title>Confusing terminology</title>
 
 <para><quote>Configuring</quote> and <quote>installing</quote>
-			don't have absolute, context-free definitions.  In some circles, we install a product and then configure it.  In the <acronym>GNU</acronym> world, we <command>configure</command> the package (generate the <filename>Makefile</filename>s), then we <command>make install</command> the package.  In the case of a library package such as &freetds; To  <emphasis>install the package</emphasis> is to copy the files the application developer will use to their canonical locations: header files to <filename>include</filename>, libraries to the <filename>lib</filename>, documentation and man pages <filename>share</filename>.  Install targets were specified during the <phrase>build process</phrase> as arguments to <command>configure</command>, covered in the last chapter.</para>
+	don't have absolute, context-free definitions.  In some circles, we install a product and then configure it.
+	In the <acronym>GNU</acronym> world, we <command>configure</command> the package (generate the
+	<filename>Makefile</filename>s), then we <command>make install</command> the package.
+	In the case of a library package such as &freetds; to  <emphasis>install the package</emphasis> is to copy the files
+	the application developer will use to their canonical locations: header files to <filename>include</filename>,
+	libraries to the <filename>lib</filename>, documentation and man pages <filename>share</filename>.
+	Install targets were specified during the <phrase>build process</phrase> as arguments to <command>configure</command>,
+	covered in the last chapter.</para>
 
 <para>For lack of a better term, this chapter describes installing the <emphasis>product</emphasis>.  Put more specifically, once we're done with the package manager, we still have to tell &freetds; about your database servers, and we still have to tell your client programs about &freetds;.</para>
 		</note>
@@ -809,7 +778,8 @@ or
 						<row>
 							<entry>Microsoft SQL Server 2000</entry>
 							<entry>7.1</entry>
-							<entry>Include support for <symbol>bigint</symbol> (64 bit integers), <symbol>variant</symbol> and collation on all fields. Collation is not widely used. </entry>
+							<entry>Include support for <symbol>bigint</symbol> (64 bit integers),
+								<symbol>variant</symbol> and collation on all fields.</entry>
 							</row>
 						<row>
 							<entry>Microsoft SQL Server 2005</entry>
@@ -929,7 +899,9 @@ Years ago, Microsoft didn't officially create a TDS version number until after F
 	</itemizedlist>
 </para>
 
-<para>For best results, use the highest version of the protocol supported by your server.  If you encounter problems, try a lower version.  If that works, though, please report it to the mailing list!
+<para>For best results, use the highest version of the protocol supported by your server.
+	If you encounter problems, try a lower version.
+	If that works, though, please report it!
 	</para>
 
 </sect2>
@@ -982,7 +954,8 @@ versions that &freetds; had labeled 8.0 and 9.0 were actually versions 7.1 and 7
 					<footnote><para>This description applies to &dblib; and &ctlib;.  ODBC lookup is different.</para></footnote>
 					</title>
 				<listitem><para>Find <replaceable>servername</replaceable> in &freetdsconf;.  If a section with that name exists, use the hostname, port, and TDS version specified therein.</para></listitem>
-				<listitem><para>Attempt to convert <replaceable>servername</replaceable> to an IP address with <function>inet_addr(3)</function>.</para></listitem>
+				<listitem><para>Attempt to convert <replaceable>servername</replaceable> to an IP address with
+					<function>inet_addr(3)</function> or similar.</para></listitem>
 				<listitem><para>Request name-lookup from the operating system via <function>gethostbyname(3)</function> or similar.</para></listitem>
 				</orderedlist>
 			
@@ -1013,7 +986,7 @@ versions that &freetds; had labeled 8.0 and 9.0 were actually versions 7.1 and 7
 </para></listitem>
 					</itemizedlist>				</para>
 
-<para></para>
+<para/>
 
 <para><note><para>	&freetds; also supports an older configuration file format, known as the <filename>interfaces</filename> file.  Use &freetdsconf; unless <filename>interfaces</filename> is needed for your situation.  It is easier to read, and it is where all the new options are being added.  &freetds; looks for &freetdsconf; first, falling back on <filename>interfaces</filename> only if &freetdsconf; is not found.</para>
 
@@ -1025,16 +998,21 @@ versions that &freetds; had labeled 8.0 and 9.0 were actually versions 7.1 and 7
 
 <para>The default location of &freetdsconf; is determined by the  <literal>--sysconfdir</literal> option of <command>configure</command>.  If you don't specify anything, <command>configure</command>'s default <literal>sysconfdir</literal> is <filename>/usr/local/etc</filename>.  <command>tsql -C</command> reports the <literal>sysconfdir</literal> to let you confirm it.</para>
 
-<para>In addition, &freetds; will look for a file <filename>.freetds.conf</filename> in the user's home directory (<envar>${HOME}</envar><filename>/.freetds.conf</filename>).</para>
+<para>In addition, &freetds; will look for a file <filename>.freetds.conf</filename> in the user's home directory
+	(<envar>${HOME}</envar><filename>/.freetds.conf</filename>) or under <filename>~/.config</filename> directory
+	(Unix).</para>
 
 <para>The actual name and location of &freetdsconf; may be specified by the environment variable <envar>FREETDS</envar> (or <envar>FREETDSCONF</envar>, same effect).  See <link linkend="envvar">Environment Variables</link>, below.</para>
 
-<para>&freetds; reads the user's <replaceable>${HOME}/</replaceable><filename>.freetds.conf</filename> before resorting to the system-wide <replaceable>sysconfdir/</replaceable>&freetdsconf;.  The file used is the first one that is readable and contains a section for the server.</para>
+<para>&freetds; reads the user's <filename>.freetds.conf</filename> before resorting to the system-wide
+	<replaceable>sysconfdir/</replaceable>&freetdsconf;.
+	The file used is the first one that is readable and contains a section for the server.</para>
 			</sect2>
 		<sect2 id="freetdsconfformat">
 			<title>What it looks like</title>
 
-<para><tip><para> The following information is also provided in the &freetdsconf; manual page, cf. <command>man freetds.conf</command>.</para></tip></para>
+<para><tip><para>The following information is also provided in the &freetdsconf; manual page, cf.
+	<command>man freetds.conf</command>.</para></tip></para>
 
 <para>The &freetdsconf; file format is similar to that of Samba's modified <quote><filename>win.ini</filename></quote>.  It
 				is composed of two types of sections: one <literal>[global]</literal> section,  and a <literal>[<replaceable>servername</replaceable>]</literal> section for each servername.  Settings in the <literal>[global]</literal> section affect all servernames, but can be overridden in a <literal>[<replaceable>servername</replaceable>]</literal> section.  For example</para>
@@ -1095,9 +1073,9 @@ versions that &freetds; had labeled 8.0 and 9.0 were actually versions 7.1 and 7
 							<entry>any valid port</entry>
 							<entrytbl cols="3">
 								<thead>
-									<colspec colname= 'prd' colsep='0' rowsep='0'/>
-									<colspec colname= 'ver' colsep='0' rowsep='0'/>
-									<colspec colname= 'def' colsep='0' rowsep='0'/>
+									<colspec colname="prd" colsep="0" rowsep="0"/>
+									<colspec colname="ver" colsep="0" rowsep="0"/>
+									<colspec colname="def" colsep="0" rowsep="0"/>
 									<row>
 										<entry>Product</entry>
 										<entry>Version</entry>
@@ -1200,7 +1178,7 @@ This is the name of the database container in the server you are connecting to.<
 							<entry id="clientcharset"><literal>client charset</literal></entry>
 							<entry>any valid iconv character set</entry>
 							<entry>ISO-8859-1<footnote><para>Valid for ISO 8859-1 character set.  See <link linkend="Localization">Localization and <acronym>TDS</acronym> 7.0</link> for more information.</para></footnote></entry>
-							<entry>Makes &freetds; use iconv to convert to and from the specified character set from UCS-2 in <acronym>TDS</acronym> 7.0 or above.
+							<entry>Makes &freetds; use iconv to convert to and from the specified character set.
 								&freetds; uses iconv to convert all character data, so there's no need to match the server's charset to insert any characters the server supports.</entry>
 							</row>
 						<row>
@@ -1276,7 +1254,7 @@ This is the name of the database container in the server you are connecting to.<
 							<entry>File that holds root certificates (in PEM format) to verify server certificate, used during an encrypted connection.
 If not specify or empty any certificate will be accepted from server.
 If you specify <literal>system</literal> &freetds; will use system wide certificate list.
-If a certiticate is not installed server can generate a self signed certificate, in this case is useful to disable certificate validation (which is the default).
+If a certificate is not installed server can generate a self signed certificate, in this case is useful to disable certificate validation (which is the default).
 Note that is not possible to specify a directory as usually database servers does not use a certificate signed by a public global certification authority.
 </entry>
 							</row>
@@ -1313,7 +1291,16 @@ This is supported from MSSQL 2012.
 							<entry><literal>enable tls v1</literal></entry>
 							<entry>yes/no</entry>
 							<entry>no</entry>
-							<entry>Enable or disable TLS version 1.0. Useful to increase security. Not too recent Windows version (like Windows 2008) does not enable higher versions by default so be aware.</entry>
+							<entry>Enable or disable TLS version 1.0.
+Old Windows versions (like Windows 2008) does not enable higher versions by default so be aware.
+Useful to connection to some old servers.</entry>
+							</row>
+						<row>
+							<entry><literal>enable tls v1.1</literal></entry>
+							<entry>yes/no</entry>
+							<entry>no</entry>
+							<entry>Enable or disable TLS version 1.1.
+Useful to connection to some old servers.</entry>
 							</row>
 						</tbody>
 					</tgroup>
@@ -1328,7 +1315,8 @@ This is supported from MSSQL 2012.
 				<abstract><para>The logging capability has helped solve innumerable cases, some trivial and some very low-level bugs.  Sometimes a developer needs very detailed information about one function, whereas someone else may interested only in whether or not a particular function is called, or even want to see only the SQL that was transmitted to the server.</para> </abstract>
 				
 
-<para>The log's granularity can be controlled with the <literal>debug flags</literal> entry. The default value (<literal>4FFF</literal> hex) gives a level of detail that is useful for resolving problems via the mailing list.</para>
+<para>The log's granularity can be controlled with the <literal>debug flags</literal> entry.
+	The default value (<literal>4FFF</literal> hex) gives a level of detail that is useful for resolving problems.</para>
 				
 				<table id="tab.freetds.conf.debugflags">
 					<title>Valid bitmask values for <literal>debug flags</literal> entry in &freetdsconf;</title>
@@ -1400,10 +1388,10 @@ This is supported from MSSQL 2012.
 				<itemizedlist id="lst.freetds.conf.deprecated" spacing="compact">
 					<title>Deprecated &freetdsconf; settings</title>
 					<listitem><para><symbol>try server login</symbol></para></listitem>
-					<listitem><para><symbol>try domain login </symbol></para></listitem>
-					<listitem><para><symbol>nt domain </symbol></para></listitem>
-					<listitem><para><symbol>cross domain login </symbol></para></listitem>
-					<listitem><para><symbol>debug level </symbol></para></listitem>
+					<listitem><para><symbol>try domain login</symbol></para></listitem>
+					<listitem><para><symbol>nt domain</symbol></para></listitem>
+					<listitem><para><symbol>cross domain login</symbol></para></listitem>
+					<listitem><para><symbol>debug level</symbol></para></listitem>
 					</itemizedlist>
 				</sect3>
 			
@@ -1780,15 +1768,15 @@ The server responds with a port number.
 	There was a problem connecting to the server</computeroutput></screen>
 	</example></para>
 	
-				<bridgehead renderas='sect3'>Bypassing &freetdsconf;:</bridgehead>
+				<bridgehead renderas="sect3">Bypassing &freetdsconf;:</bridgehead>
 
 <para><cmdsynopsis label="Syntax synopsis for tsql">
 						<command>tsql</command>
-						<arg choice='req'>-H <replaceable>hostname</replaceable></arg>
-						<arg choice='req'>-p <replaceable>port</replaceable></arg>
-						<arg choice='req'>-U <replaceable>username</replaceable></arg>
-						<arg choice='opt'>-P<replaceable>password</replaceable></arg>
-						<arg choice='opt'>-C</arg>
+						<arg choice="req">-H <replaceable>hostname</replaceable></arg>
+						<arg choice="req">-p <replaceable>port</replaceable></arg>
+						<arg choice="req">-U <replaceable>username</replaceable></arg>
+						<arg choice="opt">-P<replaceable>password</replaceable></arg>
+						<arg choice="opt">-C</arg>
 						</cmdsynopsis>
 					
 					Keep in mind that the TDS protocol version normally comes from &freetdsconf;.  When using <command>tsql</command> this way, the library uses the compiled-in default (set by the <filename>configure</filename> script).  If that's not what you want, override it using the <envar>TDSVER</envar> environment variable.</para>
@@ -1811,8 +1799,10 @@ The server responds with a port number.
 Although the directories are named <filename>unittests</filename> they are not unit tests, most of them require a configured database to work.
 				
 <screen>
+
 	<prompt>$ </prompt><userinput>ls -d -1 src/*/unittests</userinput>
-	<computeroutput>src/ctlib/unittests
+	<computeroutput>src/apps/unittests
+	src/ctlib/unittests
 	src/dblib/unittests
 	src/odbc/unittests
 	src/replacements/unittests
@@ -1854,7 +1844,9 @@ The ODBC tests all build their own <filename>odbc.ini</filename> and try to redi
 
 <para>But &freetds; did not start out as an ODBC driver (remember &dblib; and &ctlib;), and has always had its own way to store server properties: &freetdsconf;.  When Brian added the &freetds; ODBC driver, he began by supporting the old <function>SQLConnect</function>, using <filename>odbc.ini</filename> to describe the DSN.  That choice complied with the expectations of the Driver Managers, and minimized the amount of duplicated information in the configuration files.  But it can be a little confusing, too, because <filename>odbc.ini</filename> in effect points to &freetdsconf;.  We call this configuration <firstterm>ODBC-combined</firstterm>, because it supports all three &freetds; libraries.</para>
 
-<para>As progress on the the &freetds; ODBC library progressed, the driver was made able to read the connection attributes directly from <filename>odbc.ini</filename>, rather than leaning on &freetdsconf;.  For installations that don't need &dblib; and &ctlib;, this <firstterm>ODBC-only</firstterm> setup is simpler.</para>
+<para>As progress on the &freetds; ODBC library progressed, the driver was made able to read the connection attributes directly
+	from <filename>odbc.ini</filename>, rather than leaning on &freetdsconf;.
+	For installations that don't need &dblib; and &ctlib;, this <firstterm>ODBC-only</firstterm> setup is simpler.</para>
 
 <para>More recently, <function>SQLDriverConnect</function> was added to &freetds;.  As described above, this function allows the application to specify connection attributes with reference to either, or neither, configuration file.  It's your choice.  In making that choice, keep the following terms clear in your mind:</para>
 		
@@ -1995,7 +1987,7 @@ The ODBC tests all build their own <filename>odbc.ini</filename> and try to redi
 							<entry><literal>TDS_Version</literal></entry>
 							<entry>Any valid protocol version</entry>
 							<entry>Depends on the TDS version specified with <command>configure</command></entry>
-							<entry>TDS protocol version to use (e.g., 5.0, 7.0).</entry>
+							<entry>TDS protocol version to use (e.g., 5.0, 7.4).</entry>
 							</row>
 						<row>
 							<entry><literal>ClientCharset</literal> or <literal>Client_Charset</literal></entry>
@@ -2060,6 +2052,17 @@ The ODBC tests all build their own <filename>odbc.ini</filename> and try to redi
 							Similar to encryption on &freetdsconf; but Microsoft compatible.</entry>
 							</row>
 						<row>
+							<entry><literal>ServerCertificate</literal></entry>
+							<entry>Any</entry>
+							<entry>none</entry>
+							<entry>File that holds root certificates (in PEM format) to verify server certificate, used during an encrypted connection.
+If not specify or empty any certificate will be accepted from server.
+If you specify <literal>system</literal> &freetds; will use system wide certificate list.
+If a certificate is not installed server can generate a self signed certificate, in this case is useful to disable certificate validation (which is the default).
+Note that is not possible to specify a directory as usually database servers does not use a certificate signed by a public global certification authority.
+							Microsoft compatible.</entry>
+							</row>
+						<row>
 							<entry><literal>HostNameInCertificate</literal></entry>
 							<entry>Server name</entry>
 							<entry>null</entry>
@@ -2076,7 +2079,8 @@ The ODBC tests all build their own <filename>odbc.ini</filename> and try to redi
 							<entry><literal>UseNTLMv2</literal></entry>
 							<entry>Yes/No</entry>
 							<entry>Yes</entry>
-							<entry>Use NTLMv2 instead of normal NTLM. Use this option if your Windows domain have this setting.</entry>
+							<entry>Use NTLMv2 instead of normal NTLM.
+								Disable this option if your Windows domain have this setting.</entry>
 							</row>
 						<row>
 							<entry><literal>REALM</literal></entry>
@@ -2100,19 +2104,19 @@ This setting allow to do it. You should specify <literal>Database</literal> attr
 						<row>
 							<entry><literal>DumpFile</literal></entry>
 							<entry>Any</entry>
-							<entry></entry>
+							<entry/>
 							<entry>File name where to dump logs.</entry>
 							</row>
 						<row>
 							<entry><literal>DumpFileAppend</literal></entry>
 							<entry>Yes/No</entry>
 							<entry>No</entry>
-							<entry></entry>
+							<entry/>
 							</row>
 						<row>
 							<entry><literal>DumpFlags</literal></entry>
 							<entry>Any</entry>
-							<entry></entry>
+							<entry/>
 							<entry>Debug flags. See freetds.conf entries.</entry>
 							</row>
 						<row>
@@ -2124,8 +2128,14 @@ This setting allow to do it. You should specify <literal>Database</literal> attr
 						<row>
 							<entry><literal>Timeout</literal></entry>
 							<entry>Integer number</entry>
-							<entry></entry>
+							<entry/>
 							<entry>Query timeout in seconds.</entry>
+							</row>
+						<row>
+							<entry><literal>ConnectionTimeout</literal></entry>
+							<entry>Integer number</entry>
+							<entry/>
+							<entry>Connection timeout in seconds.</entry>
 							</row>
 						</tbody>
 					</tgroup>
@@ -2171,7 +2181,7 @@ This setting allow to do it. You should specify <literal>Database</literal> attr
 	res = SQLDriverConnect(Connection, NULL, (SQLCHAR *) tmp, SQL_NTS,
 				(SQLCHAR *) tmp, sizeof(tmp), &amp;len, SQL_DRIVER_NOPROMPT);
 	if (!SQL_SUCCEEDED(res)) {
-		printf("Unable to open data source (ret=%d)\n", res);
+		fprintf(stderr, "Unable to open data source (ret=%d)\n", res);
 		exit(1);
 	}
 	</programlisting>
@@ -2191,7 +2201,7 @@ You can even establish a connection without reference to either <filename>odbc.i
 	res = SQLDriverConnect(Connection, NULL, (SQLCHAR *) tmp, SQL_NTS,
 				(SQLCHAR *) tmp, sizeof(tmp), &amp;len, SQL_DRIVER_NOPROMPT);
 	if (!SQL_SUCCEEDED(res)) {
-		printf("Unable to open data source (ret=%d)\n", res);
+		fprintf(stderr, "Unable to open data source (ret=%d)\n", res);
 		exit(1);
 	}
 	</programlisting>
@@ -2422,7 +2432,8 @@ If no <function>iconv</function> library is found, or if it is explicitly disabl
 	</programlisting>
 			</example>
 
-<para>It is also worth clarifying that <acronym>TDS 7.0</acronym> and above do not accept any specified character set during login, as 4.2 does.  A <acronym>TDS 7.0</acronym> login packet uses <acronym>UCS-2</acronym>.</para>
+<para>It is also worth clarifying that <acronym>TDS 7.0</acronym> and above do not accept any specified character set during login, as 4.2 does.
+	A <acronym>TDS 7.0</acronym> login packet uses <acronym>UTF-16</acronym>.</para>
 		<sect2 id="localization.servernote"><title>Microsoft Server Note</title>
 
 <para>String literals in SQL must be prefixed with 'N' unless the enclosed string can be represented in the server's <emphasis>single-byte</emphasis> character set, irrespective of the column's datatype.  For example, in the SQL statement
@@ -2432,15 +2443,28 @@ If no <function>iconv</function> library is found, or if it is explicitly disabl
 	
 				the string is subject to somewhat surprising treatment by the server.</para>
 
-<para>When the server parses the SQL, it extracts the data values for insertion (or update, or comparison, etc.)  Unprefixed strings are converted to the single-byte character set of the server/database.<footnote><para>The precise rules are unknown to the author.</para></footnote>   Inserted data are then of course stored in the column.  In the case of UCS-2 columns &mdash; <literal>nchar</literal>, <literal>nvarchar</literal>, and <literal>ntext</literal> &mdash; the value stored is that which results from a <emphasis>second</emphasis> conversion: from the single-byte form to the <acronym>UCS-2</acronym> form.</para>
+<para>When the server parses the SQL, it extracts the data values for insertion (or update, or comparison, etc.)
+	Unprefixed strings are converted to the single-byte character set of the server/database.<footnote><para>The precise
+	rules are unknown to the author.</para></footnote>
+	Inserted data are then of course stored in the column.
+	In the case of UTF-16 columns &mdash; <literal>nchar</literal>, <literal>nvarchar</literal>, and <literal>ntext</literal>
+	&mdash; the value stored is that which results from a <emphasis>second</emphasis> conversion: from the single-byte
+	form to the <acronym>UTF-16</acronym> form.</para>
 
 <para>The <emphasis>only</emphasis> safe way to enclose strings in SQL text is with an 'N' prefix:
 				
 <informalexample><screen>
 	INSERT INTO tablename (greeting) VALUES (N'Hall&aring;')</screen></informalexample>				</para>
-	<bridgehead renderas='sect3'>Commentary</bridgehead>
+	<bridgehead renderas="sect3">Commentary</bridgehead>
 
-<para>What's surprising about this?  Versions 7.0 and later of the TDS protocol use UCS-2 to send SQL text.  No matter how your local client is configured &mdash; with <acronym>UCS-2</acronym> or <acronym>ISO 8859-1</acronym> or anything else &mdash; it's converted to <acronym>UCS-2</acronym> before it's sent to the server.  And obviously arrives at the server as <acronym>UCS-2</acronym>.  If the column into which it's being inserted is also <acronym>UCS-2</acronym>, there's no need of <emphasis>any</emphasis> conversion, much less two, and <emphasis>certainly</emphasis> no need to lose information.</para>
+<para>What's surprising about this?  Versions 7.0 and later of the TDS protocol use UTF-16 to send SQL text.
+	No matter how your local client is configured &mdash; with <acronym>UTF-16</acronym> or
+	<acronym>ISO 8859-1</acronym> or anything else &mdash; it's converted to <acronym>UTF-16</acronym> before
+	it's sent to the server.
+	And obviously arrives at the server as <acronym>UTF-16</acronym>.
+	If the column into which it's being inserted is also <acronym>UTF-16</acronym>, there's no need
+	of <emphasis>any</emphasis> conversion, much less two, and <emphasis>certainly</emphasis> no need to
+	lose information.</para>
 
 <para>Why this happens is anyone's guess.  Here's one: it makes the datatype of the column unimportant.  Regardless of whether you use char/varchar/text or nchar/nvarchar/ntext or a mixture of the two, the arriving SQL (if na&iuml;vely written) will store exactly the same characters.</para>
 			</sect2>
@@ -2543,7 +2567,7 @@ To avoid this problem, choose a threading model in <filename>odbcinst.ini</filen
 </para></important>
 
 <para>As an alternative to &freetds; logging, you might also consider using <command>tcpdump</command> or
-	<ulink url="https://www.wireshark.org/">wireshark</ulink> to log network packets.
+	<ulink url="https://www.wireshark.org/">Wireshark</ulink> to log network packets.
 	While not as useful as a <acronym>TDS</acronym> log, it can also help to identify problems.</para>
 				
 		</sect1>
@@ -2554,7 +2578,8 @@ To avoid this problem, choose a threading model in <filename>odbcinst.ini</filen
 
 <para>The &freetds; connection pool is a server process; it emulates a <productname>SQL Server</productname>.  Any program that can attach to a real <productname>SQL Server</productname> may instead elect to attach to the pool server.  The pool in turn connects to the <productname>SQL Server</productname> and database you specify, and attempts to share these connections.  See the <filename>src/pool/README</filename> for a more detailed description of its inner workings.</para>
 
-<para>To configure the pool server, first make sure &freetds; has a working entry for the real <productname>SQL Server</productname> by connecting to it with <application>SQSH</application> or another program.</para>
+<para>To configure the pool server, first make sure &freetds; has a working entry for the real
+	<productname>SQL Server</productname> by connecting to it with <application>tsql</application> or another program.</para>
 		
 <note><para>The &freetds; connection pool currently does not supports <acronym>TDS</acronym> version 5.0 (Sybase) and encrypted connections.
 <emphasis>This restriction applies to both the client-to-pool and pool-to-server connections!</emphasis>
@@ -2850,7 +2875,7 @@ To avoid this problem, choose a threading model in <filename>odbcinst.ini</filen
 <para><example id="e.g.DBD.ODBC.connect">
 	<title>Connect to a server with <systemitem class="library">DBD::ODBC</systemitem></title>
 <programlisting>
-	#!/usr/local/bin/perl
+	#!/usr/bin/env perl
 	#
 	use DBI;
 	
@@ -2887,7 +2912,7 @@ To avoid this problem, choose a threading model in <filename>odbcinst.ini</filen
 
 				<example id="e.g.DBD.Sybase.Connect"><title>Connect to a server with <systemitem class="library">DBD::Sybase</systemitem></title>
 <programlisting>
-	#!/usr/local/bin/perl
+	#!/usr/bin/env perl
 	#
 	use DBI;
 	
@@ -3033,7 +3058,7 @@ For instance, some parameters are defined as SQLINTEGER but are used for pointer
 But SQLINTEGER was (and remains) 32-bit, while pointer offsets must be 64-bit.
 Also row numbers and some other formerly 32-bit quantities are now 64-bit.</para>
 
-<para>If you use &unixODBC; Frediano would recommend at least version 2.2.14. Earlier versions have issues if used on 64-bit environments.</para>
+<para>If you use &unixODBC; we recommend at least version 2.2.14. Earlier versions have issues if used on 64-bit environments.</para>
 			</sect2>
 		<sect2 id="uodbc.wchar">
 			<title>sizeof(SQLWCHAR)</title>
@@ -3090,7 +3115,10 @@ If you compile the &freetds; ODBC driver using &iODBC; take care to ensure all d
 
 <para>Questions sometimes arise over large <type>varchar</type> types (anything larger than <type>varchar(255)</type>) that became available with Microsoft <productname>SQL Server 7.0</productname>.  When accessing long <type>varchar</type>s with <acronym>TDS</acronym> protocol version 4.2 or 5.0, these fields will be truncated to 255 characters, due to limitations inherent in the protocol definition.  Your best bet in that case is to convert them to <type>text</type> types.</para>
 
-<para>In Microsoft <productname>SQL Server</productname> 7.0 and later, <structname>varchar</structname> types can hold up to 8000 bytes (8000 <acronym>ASCII</acronym> characters or 4000 Unicode characters).  To move these large <structname>varchar</structname>s through <acronym>TDS</acronym> 4.2, convert them with either a <command>CONVERT</command> as in,
+<para>In Microsoft <productname>SQL Server</productname> 7.0 and later, <structname>varchar</structname> types can hold up to 8000
+	bytes (8000 <acronym>ASCII</acronym> characters or 4000 Unicode units).
+	To move these large <structname>varchar</structname>s through <acronym>TDS</acronym> 4.2, convert them with either
+	a <command>CONVERT</command> as in,
 	<screen>
 	<userinput>SELECT mycol = convert(mycol, text) FROM mytable</userinput> </screen>
 	or with the newer SQL92 <command>CAST</command> syntax e.g.,
@@ -3241,9 +3269,12 @@ This applies only to Microsoft <productname>SQL Server</productname> and you'll 
 				<emphasis>includes login packets which can contain clear text or clear text
 					equivalent passwords.</emphasis> So, if this is a concern (most likely
 				is) make sure that the files are not world readable, and avoid posting
-				them to mailing lists.</para>
+				them publicly.</para>
 
-<para>Once in a while, someone writes to the mailing list, asking why &freetds; is so <emphasis>slow</emphasis>.  It sometimes turns out that logging was left turned on.  Don't you be the next victim!  &freetds; logs are meant for development and debugging, not as a system monitoring tool.</para>
+<para>Once in a while, someone writes asking why &freetds; is so <emphasis>slow</emphasis>.
+	It sometimes turns out that logging was left turned on.
+	Don't you be the next victim!
+	&freetds; logs are meant for development and debugging, not as a system monitoring tool.</para>
 			</sect2>
 		
 		<sect2 id="Logging.freetds.conf">
@@ -3338,7 +3369,7 @@ This applies only to Microsoft <productname>SQL Server</productname> and you'll 
 					skills.</para>
 
 					<para>If you cannot determine the cause yourself, send the backtrace
-					to the <link linkend="mailinglist">mailing list</link>, along with the
+					to the <link linkend="webproject">project page</link>, along with the
 					PHP script.  It helps to make the script as small as possible, but
 					still fail.  It also helps to report the version numbers of PHP, and
 					&freetds;.</para>
@@ -3352,7 +3383,7 @@ This applies only to Microsoft <productname>SQL Server</productname> and you'll 
 
 <para>&freetds; is <emphasis>not</emphasis> slow.  We know this because we've tested it.  It's measurably slower than the vendors' products for some operations, but it's not noticeably slower and it's certainly no laggard.  If your experience is different, if you're waiting 30 seconds for simple operations or minutes instead of seconds for for query results, something is up with your setup.  There are two likely culprits.</para>
 		
-		<itemizedlist mark='bullet'>
+		<itemizedlist mark="bullet">
 			<listitem><para>Logging.  If everything seems a bit sluggish, check to make sure logging is turned off. <envar>TDSDUMP</envar> should not be defined, and there should be no <literal>dump file</literal>  mentioned in &freetdsconf;.  You can double-check by setting <envar>TDSDUMPCONFIG</envar> temporarily, which will log only the startup process.</para>
 				</listitem>
 			<listitem><para>DNS.  If connecting to the server takes 30 seconds or 1 minute, you could do worse than to check your <filename>resolv.conf</filename>.  Use <command>host</command> or <command>nslookup</command> to confirm that &freetds; can actually resolve the name/address you provided in &freetdsconf;.</para>
@@ -3404,7 +3435,8 @@ Compile-time settings (established with the "configure" script)
                              GnuTLS: no
                                MARS: yes </computeroutput></screen>
       
-For &odbc; setup issues, the <command>osql</command> script is intended to confirm the configuration files are all sane.  If it fails to report a problem, please post a message describing the problem to the mailing list.  Thanks.  </para>
+For &odbc; setup issues, the <command>osql</command> script is intended to confirm the configuration files are all sane.
+If it fails to report a problem, please post a message describing the problem.  Thanks.  </para>
 
 		</sect1>
 	
@@ -3415,9 +3447,15 @@ For &odbc; setup issues, the <command>osql</command> script is intended to confi
 
 <para>If you can demonstrate the problem with <command>tsql</command> or <command>sqsh</command>, you can expect a quick answer to your question, possibly even a fairly quick fix.  (It has happened several times in the last few years that bug reports to small problems were fixed the same day.  On a few occasions, new functions were added in a few days.  Making &freetds; useful and bugless is the goal of the project, after all.)</para>
 
-<para>&freetds; being what it is, problems frequently arise amidst complex environments.  It can be hard for both you and the list participants &mdash; who are your allies and best resource &mdash; to determine what's going wrong.  If you can submit a script that they can use to try to reproduce your results, you have a much better chance of happy resolution.</para>
+<para>&freetds; being what it is, problems frequently arise amidst complex environments.
+It can be hard for both you and &freetds; members &mdash; who are your allies and best resource &mdash;
+to determine what's going wrong.
+If you can submit a script that they can use to try to reproduce your results,
+you have a much better chance of happy resolution.</para>
 
-<para>On the plus side, the list includes people with a variety of backgrounds, who frequently answer questions that aren't really about &freetds; <foreignphrase>per se</foreignphrase>.  Clear questions have sometimes even led to submitting patches to other projects.</para>
+<para>On the plus side, the project includes people with a variety of backgrounds, who frequently answer
+questions that aren't really about &freetds; <foreignphrase>per se</foreignphrase>.
+Clear questions have sometimes even led to submitting patches to other projects.</para>
 		<sect2 id="help.otherclient"><title>Try a different client</title>
 
 <para>&freetds; comes with its own utilities that use the various libraries.  It's a good idea to run your query through one of them &mdash; the one that uses the same API you're using &mdash; to see if it produces the same behavior you're seeing.  That helps eliminate your application (and the rest of the calling hierarchy) as a source of the problem.</para>
@@ -3431,7 +3469,9 @@ Also consider security settings like firewalls, SELinux/AppArmor or similars.</p
 			</sect2>
 		
 		</sect1>
-	<sect1 id="mailinglist"><title>The Mailing List</title>
+
+	<sect1 id="webproject"><title>GitHub project page</title>
+
 		<epigraph>
 			<attribution>3 Henry VI, I, ii, approximately</attribution>
 
@@ -3441,22 +3481,32 @@ Also consider security settings like firewalls, SELinux/AppArmor or similars.</p
 				</literallayout></para>
 			</epigraph>
 				
-		<sect2 id="Archive"><title>The Archive</title>
-			
+<para>Currently most of the activities run on the <ulink url="https://github.com/FreeTDS/freetds/">project
+page</ulink>.</para>
 
-<para>The &freetds; mailing list <ulink url="https://lists.ibiblio.org/pipermail/freetds/">archive</ulink> is a good place to start.
-	It is searchable.  It should be considered the most up to date (and least edited) source of information.</para>
+<para>The project has various sections:
 
-<para>New developments between releases tend <emphasis>not</emphasis> to be announced on the website.  The website is updated only intermittently, when we post a new release or &freetds; is somehow in the news, say.  If you found a bug or need a feature, you may find it was announced/discussed/fixed by perusing the archive.</para>
-			</sect2>
-		<sect2 id="Asklist">
-			<title>Ask the list</title>
+<itemizedlist>
+	<listitem><para>Pull Requests: Submit proposed changes;</para></listitem>
+	<listitem><para>Issues: Report any problems encountered;</para></listitem>
+	<listitem><para>Discussions: For all other topics.</para></listitem>
+</itemizedlist>
 
-<para>Many of the original authors and anyone maintaining or extending the code reads the list.  The traffic tends to be bursty.  It usually focuses on build problems and troubleshooting.  Again, the more specific your question, the sooner you'll get a useful reply (if it comes).</para>
-			
+</para>
 
-<para>Please, do not email the authors directly. You may well be ignored because they're they type that gets a ton of mail.  Anyone willing to address your question reads the list, and you don't want to offend anyone willing to help you by going about it the wrong way.</para>
-			</sect2>
+<para>New developments between releases tend <emphasis>not</emphasis> to be announced on the main website.
+The website is updated only intermittently, when we post a new release or &freetds; is somehow in the news, say.</para>
+
+		</sect1>
+
+	<sect1 id="mailinglist"><title>The Mailing List</title>
+
+<para>In the past every discussion happened on the mailing list.
+However during the years everything moved to the GitHub project.</para>
+
+<para>You can find old list discussions in the
+<ulink url="https://lists.ibiblio.org/pipermail/freetds/">archive</ulink>.</para>
+
 		</sect1>
 	
 	<sect1 id="askingforhelp"><title>What to include when asking for help</title>
@@ -3464,7 +3514,7 @@ Also consider security settings like firewalls, SELinux/AppArmor or similars.</p
 			
 
 <para>It's important to convey your setup and configuration.
-				<simplelist type='vert' columns='1'>
+				<simplelist type="vert" columns="1">
 					<member><productname>SQL Server</productname> version</member>
 					<member>&freetds; version (or snapshot date, if not a release)</member>
 					<member>any options used with <command>configure</command></member>
@@ -3477,7 +3527,11 @@ Also consider security settings like firewalls, SELinux/AppArmor or similars.</p
 		<sect2 id="help.log"><title>Attach a logfile</title>
 			
 
-<para>If you're puzzled by some interaction with the server (often the case), it's a very good idea to set <envar>TDSDUMP</envar> and attach the log to your message.  Messages are currently limited to 75 KB attachments, and the logs are quite detailed, so make your query as short as possible.  If necessary, trim the log; <command>gzip</command> is also your friend here.  It's always a good idea to post it on a website where people can fetch it if they're so inclined.</para>
+<para>If you're puzzled by some interaction with the server (often the case), it's a very good idea to set <envar>TDSDUMP</envar>
+and attach the log to your message.
+The logs are quite detailed, so make your query as short as possible.
+If necessary, trim the log; <command>gzip</command> is also your friend here.
+It's always a good idea to post it on a website where people can fetch it if they're so inclined.</para>
 
 <para>Log files are especially important if you're not programming at the C level.  Sometimes there are problems &mdash; an impedance mismatch, to coin a phrase &mdash; between &freetds; and the calling framework/language.  But if you write to the list and say <quote>Why does my <literal>PHP foo()</literal> returns an empty string?</quote>, please keep in mind that your question might as well be in Urdu to someone familiar with the C library.  Without knowing which C function was called, and with what data, it's impossible to even begin to try to answer the question.  </para>
 
@@ -3504,7 +3558,8 @@ Also consider security settings like firewalls, SELinux/AppArmor or similars.</p
 <para>The time you enjoy wasting is not wasted time.</para>
 		</epigraph>
 
-<para>&freetds; is a cooperative, volunteer effort.  Flame wars on the list are unknown and the signal to noise ratio is pretty high for its venue.  Many people have contributed patches, and few have been turned away.</para>
+<para>&freetds; is a cooperative, volunteer effort.
+	Many people have contributed patches, and few have been turned away.</para>
 	<sect1 id="Pickweakspot">
 		<title>Pick a weak spot and fix it.</title>
 
@@ -3526,36 +3581,52 @@ Also consider security settings like firewalls, SELinux/AppArmor or similars.</p
 			<title>Send a patch</title>
 
 <para>Good patches are nearly always applied in short order.
-	Patches uploaded to <ulink url="https://sourceforge.net/p/freetds/patches/">SourceForge</ulink> trigger automatic notification to the &freetds;  mailing list.</para>
+Pull requests can be opened at <ulink url="https://github.com/FreeTDS/freetds/pulls">GitHub</ulink>.</para>
+
 			</sect2>
 		<sect2 id="Correct">
 			<title>Correct this User Guide</title>
 
-<para>Any corrections or suggestions, be they typographical, grammatical, structural, factual, or mineral are most  welcome.  Please send it to the <ulink url="mailto:freetds@lists.ibiblio.org">&freetds; mailing list</ulink>.</para>
+<para>Any corrections or suggestions, be they typographical, grammatical, structural, factual, or mineral are most  welcome.
+Please send it to the <link linkend="webproject">project page</link>.</para>
 
-<para>The User Guide is maintained in <acronym>XML</acronym> DocBook format; the file in your distibution is  <filename>doc/userguide.xml</filename>.  It is a flat ASCII file that you can edit with any text editor.  You don't have to know <acronym>XML</acronym> to correct or add to the User Guide, however.  Just open it up, find the place you're interested in, and type away.  Do a <command>diff -u <replaceable>old_version</replaceable> <replaceable>your_version</replaceable></command> and post your patch to the SourceForge site.  Any errors or lackings in your markup will be graciously emended by yours truly.</para>
+<para>The User Guide is maintained in <acronym>XML</acronym> DocBook format; the file in your distibution is <filename>doc/userguide.xml</filename>.
+It is a flat ASCII file that you can edit with any text editor.
+You don't have to know <acronym>XML</acronym> to correct or add to the User Guide, however.
+Just open it up, find the place you're interested in, and type away.
+Do a <command>diff -u <replaceable>old_version</replaceable> <replaceable>your_version</replaceable></command> and post your
+patch to the <link linkend="webproject">GitHub project page</link>.
+Any errors or lackings in your markup will be graciously emended by yours truly.</para>
 			</sect2>
 		<sect2 id="Documentapi">
 			<title>Document an <acronym>API</acronym></title>
 
 <para>We have just begun an independent reference manual to &freetds;; the main <acronym>API</acronym> documents are the work of the server vendors.
-	We're using <ulink url="https://www.doxygen.nl">Doxygen</ulink>, which extracts documentation directly from comments in the source code, and we're maybe 25% done.</para>
+	We're using <ulink url="https://www.doxygen.nl">Doxygen</ulink>, which extracts documentation directly from comments in the source code.</para>
 
 <para>The <acronym>TDS</acronym> protocol is partly documented, as are the <acronym>API</acronym>s to <filename>libtds</filename> and &dblib;, but much remains.</para>
 			</sect2>
 		<sect2 id="webmaster">
 			<title>Be the Webmaster</title>
 
-<para>The FAQ and in particular the news don't get updated often enough.  If that's your thing, drop a line to the <ulink url="mailto:freetds@lists.ibiblio.org">&freetds; mailing list</ulink>.</para>
+<para>The FAQ and in particular the news don't get updated often enough.
+If that's your thing, drop a line to the <link linkend="webproject">project page</link>.</para>
 			</sect2>
 		</sect1>
 
 	<sect1 id="Light.taper">
 		<title>Light another's taper</title>
 
-<para>Every question you answer on the mailing list will save someone time and, if done well, will actually improve your own knowledge.  The project's developers will often answer technical questions that require substantial understanding of the code or suggest a possible bug.  Setup issues, though &mdash; connecting and logging in to the server, getting Apache going &mdash; are questions many experienced users can and do answer, thereby fostering the community on which the project depends.  </para>
+<para>Every question you answer will save someone time and, if done well, will actually improve your own knowledge.
+The project's developers will often answer technical questions that require substantial understanding of the code or suggest a possible bug.
+Setup issues, though &mdash; connecting and logging in to the server, getting Apache going &mdash; are questions many
+experienced users can and do answer, thereby fostering the community on which the project depends.</para>
 
-<para>Your experience may well be more closely aligned with the question posed than that of anyone else reading the list that day.  You may use that framework or language or OS, or have that particular server.  No one, no matter how expert in the code, has used every configuration, version, OS, compiler, etc.  Whether you simply confirm there's a problem in some particular arrangement, or say, <quote>dunno, works for me</quote>, you're adding information.  </para>
+<para>Your experience may well be more closely aligned with the question posed than that of anyone else.
+You may use that framework or language or OS, or have that particular server.
+No one, no matter how expert in the code, has used every configuration, version, OS, compiler, etc.
+Whether you simply confirm there's a problem in some particular arrangement, or say, <quote>dunno, works for me</quote>,
+you're adding information.</para>
 
 		</sect1>
 
@@ -3564,20 +3635,6 @@ Also consider security settings like firewalls, SELinux/AppArmor or similars.</p
 
 <para>If you want to get your hands really dirty, here are some big ideas to contemplate.  </para>
 		
-		<sect2>
-			<title><literal>libtds2</literal></title>			
-
-<para>After many years developing &freetds;, we've learned quite a bit about the protocol and how to write database libraries.  Unfortunately, though, one of the things holding us back &mdash; and, obviously hampering the project &mdash; is the underlying utility library.</para>
-
-<para>This wouldn't be a from-scratch effort; most of the code is already written.  What's needed is a more uniform API that better reflects the TDS protocol, and that does <emphasis>not</emphasis> attempt character set conversions immediately on receipt of the data.  </para>   
-			</sect2>
-
-		<sect2>
-			<title><literal>libstddb</literal></title>			
-
-<para>This would be a new client library modelled after <literal>stdio</literal>, a project to demonstrate what database programming should be like.  </para>
-			</sect2>
-
 		<sect2>
 			<title>Server code </title>			
 
@@ -3589,7 +3646,8 @@ Also consider security settings like firewalls, SELinux/AppArmor or similars.</p
 	<sect1 id="Advocacy">
 		<title>Advocacy</title>
 
-<para>Out of ten people you know, it's a fair bet 10 never heard of &freetds; and nine don't understand the problem it solves.  Lots of places have begun to use Microsoft <productname>SQL Server</productname>s in all sorts of ways, and if you adhere to the Microsoft line, there's only one way to connect to them: from a Microsoft OS.</para>
+<para>Out of ten people you know, it's a fair bet 10 never heard of &freetds;
+and nine don't understand the problem it solves.</para>
 
 <para>What can &freetds; do that can't be done any other way?  Glad you asked.  &freetds; can</para>
 		<itemizedlist>
@@ -3609,11 +3667,16 @@ Also consider security settings like firewalls, SELinux/AppArmor or similars.</p
 <chapter id="programming">
 	<title>Programming</title>
 
-<para></para>
+<para/>
 	<sect1 id="TDSprotocolref">
 		<title>TDS protocol reference</title>
 
-<para>Can be found on <ulink url="https://www.freetds.org/tds.html">www.freetds.org</ulink></para>
+<para>Microsoft today publishes their documentation, you can easily find looking for
+<ulink url="https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-tds/b46a581a-39de-4745-b076-ec4dbb7d13ec">TDS
+protocol specification</ulink>.</para>
+
+<para>Some of our old discoveries can be found on <ulink url="https://www.freetds.org/tds.html">www.freetds.org</ulink>.</para>
+
 		</sect1>
 	<sect1 id="apireference"><title>API Reference Manual</title>
 
@@ -3666,9 +3729,7 @@ Also consider security settings like firewalls, SELinux/AppArmor or similars.</p
 	<sect1 id="dblib.api.summary">
 		<title>&dblib; API Implementation Summary</title>
 
-<para>Microsoft's version of &dblib; is
-			<ulink url="http://msdn.microsoft.com/en-us/library/aa936988(SQL.80).aspx">online</ulink>.
-			Sybase's is both
+<para>Sybase's version of of &dblib; is
 			<ulink url="https://help.sap.com/doc/4091f120b0c9429d8503322daeeff2be/16.0.3.8/en-US/DB-Library_C_Reference_Manual_en.pdf">online</ulink>.
 			
 			<footnote><para>Links such as these are quite perishable.  Should you find them broken, please check
@@ -3954,7 +4015,7 @@ int msg_handler(DBPROCESS*, DBINT, int, int, char*, char*, char*, int);
 
 	<para><firstterm>Results</firstterm> is a special term: it means more than rows or no rows.  To <emphasis>process the results</emphasis> means to gather the data returned by the server into the application's variables.
 					<table id="tab.kinds.of.results"><title>Kinds of Results</title>
-						<tgroup cols='6' align='left' colsep='1' rowsep='1'>
+						<tgroup cols="6" align="left" colsep="1" rowsep="1">
 							<colspec colname="type"/>
 							<colspec colname="meta"/>
 							<colspec colname="reg"/>
@@ -4021,7 +4082,7 @@ int msg_handler(DBPROCESS*, DBINT, int, int, char*, char*, char*, int);
 
 
 	<para> <table id="tab.result.fetching.functions"><title>Result-fetching functions</title>
-						<tgroup cols='4' align='left' colsep='1' rowsep='1'>
+						<tgroup cols="4" align="left" colsep="1" rowsep="1">
 							<colspec colname="func"/>
 							<colspec colname="type"/>
 							<colspec colname="ret"/>
@@ -4098,7 +4159,7 @@ int msg_handler(DBPROCESS*, DBINT, int, int, char*, char*, char*, int);
 
 
 	<para> <table id="tab.data.fetching.functions"><title>Data-fetching functions</title>
-						<tgroup cols='5' align='left' colsep='1' rowsep='1'>
+						<tgroup cols="5" align="left" colsep="1" rowsep="1">
 							<colspec colname="type"/>
 							<colspec colname="reg"/>
 							<colspec colname="comp"/>
@@ -4152,7 +4213,7 @@ int msg_handler(DBPROCESS*, DBINT, int, int, char*, char*, char*, int);
 
 
 	<para> <table id="tab.putting.it.all.together"><title>Putting it all together </title>
-						<tgroup cols='4' align='left' colsep='1' rowsep='1'>
+						<tgroup cols="4" align="left" colsep="1" rowsep="1">
 							<colspec colname="step"/>
 							<colspec colname="func"/>
 							<colspec colname="once"/>
@@ -4509,7 +4570,7 @@ int msg_handler(DBPROCESS*, DBINT, int, int, char*, char*, char*, int);
 			<member>Extended the ODBC library, and added many, many fixes and enhancements to libtds.  </member>
 			</simplelist>
 
-<para></para>
+<para/>
 		</sect1>
 	
 	<sect1 id="Contributors">
@@ -4525,7 +4586,7 @@ int msg_handler(DBPROCESS*, DBINT, int, int, char*, char*, char*, int);
 			<member>Frediano Ziglio</member>
 			</simplelist>
 
-<para></para>
+<para/>
 		</sect1>
 	
 	</chapter>
@@ -4726,7 +4787,7 @@ Although these examples refer to static libraries, <command>nm</command> works j
 
 			<section>
 				<title>Specifying libraries</title>
-<para></para>
+<para/>
 <para>An application programmer using &freetds; will need to mention the name fo the &freetds; library being used.  Failure to do so will provoke the dread <firstterm>undefined reference</firstterm> linker error: 
 
 <example><title>Missing library name</title>
@@ -4851,7 +4912,8 @@ and <literal>Application Configuration Files</literal>.</para>
 	</appendix>
 
 <appendix id="interfacesfile"><title>The <filename>interfaces</filename> File</title>
-	<abstract><para>The <filename>interfaces</filename> file is retained for compatibility with Sybase environments.  It is recommended that new users use the <link linkend="freetdsconf">freetds.conf</link> format instead.</para></abstract>
+	<abstract><para>The <filename>interfaces</filename> file is retained for compatibility with Sybase environments.
+	It is recommended that new users use the <link linkend="freetdsconf">&freetdsconf;</link> format instead.</para></abstract>
 	<sect1 id="interfacesorigin">
 		<title>Where it came from</title>
 
@@ -4953,7 +5015,7 @@ By the way before looking for <filename>$SYBASE/interfaces</filename> file FreeT
 
 <para>The world we are all familiar with, programmingwise, is <acronym>ASCII</acronym>.
 	Our email (mostly), our <quote>text</quote> files, our web pages (mostly), all use <acronym>ASCII</acronym> to represent English (or English-like) text.
-	Perhaps because <ulink url="http://czyborra.com/charsets/iso646.html"><acronym>ASCII</acronym></ulink> was standardized back in 1972 by the ISO,
+	Perhaps because <ulink url="https://czyborra.com/charsets/iso646.html"><acronym>ASCII</acronym></ulink> was standardized back in 1972 by the ISO,
 	it seems like the <quote>natural</quote> way to store information.
 	But let's look under the hood a little bit, and examine our assumptions.</para>
 
@@ -4969,11 +5031,20 @@ By the way before looking for <filename>$SYBASE/interfaces</filename> file FreeT
 
 <para><acronym>ASCII</acronym> won, it would seem, but the race goes not to the swift.  <acronym>ASCII</acronym> has many limitations, the most egregious of which is, it's not much good for anything besides English.  It encodes all the letters and punctuation (almost) of the English alphabet, but is useless for German, Russian, and Greek, to say nothing of Chinese.</para>
 
-<para><acronym>ASCII</acronym> assigns one byte to every character, but deals with only 7 of the 8 available bits, the range 0-127 (with the <quote>high bit</quote> always zero).  Demand for computers that could display and print languages besides English &mdash; even English with em dashes and cent (&cent;) signs &mdash; arrived soon enough, with the Marketing Department way out in front of the propeller heads.  The predictable result was an array of <quote>8-bit <acronym>ASCII</acronym></quote> encoding standards for a wide variety of alphabets.  Eventually, they were standardized (or at least enumerated and documented) by the ISO.  These are what our friendly database vendors are referring to when they talk about <emphasis>character sets</emphasis>.  More information on this subject can be found at <ulink url="http://www.webreference.com/dlab/books/html/39-1.html">webreference.com</ulink>.			</para>
+<para><acronym>ASCII</acronym> assigns one byte to every character, but deals with only 7 of the 8 available bits,
+the range 0-127 (with the <quote>high bit</quote> always zero).
+Demand for computers that could display and print languages besides English &mdash; even English with em dashes
+and cent (&cent;) signs &mdash; arrived soon enough, with the Marketing Department way out in front of the propeller heads.
+The predictable result was an array of <quote>8-bit <acronym>ASCII</acronym></quote> encoding standards for a wide
+variety of alphabets.
+Eventually, they were standardized (or at least enumerated and documented) by the ISO.
+These are what our friendly database vendors are referring to when they talk about <emphasis>character sets</emphasis>.
+</para>
 
 <para>The upshot is, there is no uniform standard, no agreement on the meaning of a byte, particularly if that byte's value is greater than 127.  Let's say your client machine sends <literal>HELLO</literal> and your database stores it as  <literal>72 69 76 76 79</literal>.  When another client retrieves that value, it will convert it into human-readable form by applying an encoding standard.  If everything's tightly wrapped, it will use the very same encoding that your database used (and the same one you had in mind when you sent it), and that client will also see <literal>HELLO</literal>.  If things are not so tightly wrapped but that client is fortunate enough to be using a similar standard to what you were using, say, ISO 8859-1, he'll still see <literal>HELLO</literal>.  Most languages based on the Roman alphabet can be represented by ISO 8859-1, and are thus interchangeable.  Beyond that, things get quickly messy.  Greek clients, for one, are not so lucky: there are three ISO 8859 standards for Greek, all mutually incompatible.
 			
-			For more information, see <ulink url="http://czyborra.com/charsets/iso8859.html">ISO 8859 Alphabet Soup</ulink>.  Roman Czyborra's site is very informative; take your time there if you don't want your head to spin.</para>
+	For more information, see <ulink url="https://czyborra.com/charsets/iso8859.html">ISO 8859 Alphabet Soup</ulink>.
+	Roman Czyborra's site is very informative; take your time there if you don't want your head to spin.</para>
 
 <para>Database servers need to know what encoding standard to employ, too.  It's not obvious at first, but notions like <quote>uppercase</quote> and <quote>lowercase</quote>, trailing blanks, and collation rules all depend on what letter is meant by what number.  (Collation even depends on what culture is interpreting the letters.)</para>
 		</section>
@@ -5034,18 +5105,20 @@ Microsoft also designed version 7.0 (and up) of the <acronym>TDS</acronym> proto
 		</section>
 	<section id="UnicodeFreeTDS"><title>Unicode and &freetds;</title>
 
-<para>Microsoft servers using TDS 7.0 and above (anything since Microsoft SQL Server 6.5) transmit their data in UCS-2 format (16-bit integers).
-Because most applications linked to &freetds; are not prepared to deal with UCS-2 data, &freetds; can convert the data to something more acceptable, including <acronym>ASCII</acronym>.
+<para>Microsoft servers using TDS 7.0 and above (anything since Microsoft SQL Server 6.5) transmit their data in UTF-16 format (16-bit integers).
+Because most applications linked to &freetds; are not prepared to deal with UTF-16 data, &freetds; can convert the data to something more acceptable, including <acronym>ASCII</acronym>.
 To do so, it employs an  <productname>iconv</productname>  library.
 &freetds; determines the server's encoding from the TDS protocol and information reported by the server (generally per connection, but in the case of TDS 7.1, per result set column).
 It discovers the client's encoding in &freetdsconf;.
 &freetds; will happily convert and convey your data in any <emphasis>single-byte</emphasis> format that <productname>iconv</productname> can provide.
 In practice, this normally means some form of ISO 8859-x or UTF-8.</para>
 
+<para>&freetds; attempts to convert server character sets to and from client-specified character set,
+even for single-byte encodings or Sybase servers regardless if the server encoding is Unicode or not.</para>
+
 <para>At some future time, &freetds; aims to support Unicode and other multi-byte character sets.
 It does not do so at the current time, beside using wide functions in ODBC.</para>
 
-<para>Sybase servers, by the way, adhere to a <quote>server makes right</quote> policy: they transmit their data in whatever character set the client requested at login time.  The list of available character sets is fairly short, but includes UTF-8.  While  &freetds; <emphasis>could</emphasis> convert Sybase data streams as easily as it does Microsoft data streams, to our knowledge no one is doing so.  The Sybase server can perform the conversion itself, making &freetds;'s capability in this regard largely redundant and irrelevant.</para>
 		<section id="moreinfo"><title>For further information</title>
 			<simplelist type="vert" columns="1">
 				<member><ulink url="https://www.cl.cam.ac.uk/~mgk25/unicode.html">UTF-8 and Unicode FAQ for Unix/Linux</ulink>, by Markus Kuhn.

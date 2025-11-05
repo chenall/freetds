@@ -187,7 +187,7 @@ _csclient_msg(CS_CONTEXT * ctx, const char *funcname, int layer, int origin, int
 
 	va_start(ap, fmt);
 
-	if (ctx->_cslibmsg_cb) {
+	if (ctx->cslibmsg_cb) {
 		cm.severity = severity;
 		cm.msgnumber = (((layer << 24) & 0xFF000000)
 				| ((origin << 16) & 0x00FF0000)
@@ -203,7 +203,7 @@ _csclient_msg(CS_CONTEXT * ctx, const char *funcname, int layer, int origin, int
 		cm.status = 0;
 		/* cm.sqlstate */
 		cm.sqlstatelen = 0;
-		ctx->_cslibmsg_cb(ctx, &cm);
+		ctx->cslibmsg_cb(ctx, &cm);
 	}
 
 	va_end(ap);
@@ -406,7 +406,7 @@ cs_config(CS_CONTEXT * ctx, CS_INT action, CS_INT property, CS_VOID * buffer, CS
 		}
 		switch (property) {
 		case CS_MESSAGE_CB:
-			*(CS_CSLIBMSG_FUNC*) buffer = ctx->_cslibmsg_cb;
+			*(CS_CSLIBMSG_FUNC*) buffer = ctx->cslibmsg_cb;
 			return CS_SUCCEED;
 		case CS_USERDATA:
 			if (buflen < 0) {
@@ -440,7 +440,7 @@ cs_config(CS_CONTEXT * ctx, CS_INT action, CS_INT property, CS_VOID * buffer, CS
 			if ( ctx->cs_errhandletype == _CS_ERRHAND_INLINE) {
 				cs_diag_clearmsg(ctx, CS_UNUSED);
 			}
-			ctx->_cslibmsg_cb = (CS_CSLIBMSG_FUNC) buffer;
+			ctx->cslibmsg_cb = (CS_CSLIBMSG_FUNC) buffer;
 			ctx->cs_errhandletype = _CS_ERRHAND_CB;
 			return CS_SUCCEED;
 		case CS_USERDATA:
@@ -479,7 +479,7 @@ cs_config(CS_CONTEXT * ctx, CS_INT action, CS_INT property, CS_VOID * buffer, CS
 			if ( ctx->cs_errhandletype == _CS_ERRHAND_INLINE) {
 				cs_diag_clearmsg(ctx, CS_UNUSED);
 			}
-			ctx->_cslibmsg_cb = NULL;
+			ctx->cslibmsg_cb = NULL;
 			ctx->cs_errhandletype = 0;
 			return CS_SUCCEED;
 		case CS_USERDATA:
@@ -505,9 +505,9 @@ cs_config(CS_CONTEXT * ctx, CS_INT action, CS_INT property, CS_VOID * buffer, CS
 
 CS_RETCODE
 _cs_convert(CS_CONTEXT * ctx, const CS_DATAFMT_COMMON * srcfmt, CS_VOID * srcdata,
-	    const CS_DATAFMT_COMMON * destfmt, CS_VOID * destdata, CS_INT * resultlen)
+	    const CS_DATAFMT_COMMON * destfmt, CS_VOID * destdata, CS_INT * resultlen, TDS_SERVER_TYPE desttype)
 {
-	TDS_SERVER_TYPE src_type, desttype;
+	TDS_SERVER_TYPE src_type;
 	int src_len, destlen, len;
 	CONV_RESULT cres;
 	unsigned char *dest;
@@ -515,7 +515,8 @@ _cs_convert(CS_CONTEXT * ctx, const CS_DATAFMT_COMMON * srcfmt, CS_VOID * srcdat
 	CS_INT dummy, datatype;
 	CS_VARCHAR *destvc = NULL;
 
-	tdsdump_log(TDS_DBG_FUNC, "cs_convert(%p, %p, %p, %p, %p, %p)\n", ctx, srcfmt, srcdata, destfmt, destdata, resultlen);
+	tdsdump_log(TDS_DBG_FUNC, "cs_convert(%p, %p, %p, %p, %p, %p, %d)\n",
+		    ctx, srcfmt, srcdata, destfmt, destdata, resultlen, desttype);
 
 	/* If destfmt is NULL we have a problem */
 	if (destfmt == NULL) {
@@ -556,10 +557,13 @@ _cs_convert(CS_CONTEXT * ctx, const CS_DATAFMT_COMMON * srcfmt, CS_VOID * srcdat
 	}
 
 	datatype = destfmt->datatype;
-	desttype = _ct_get_server_type(NULL, datatype);
 	if (desttype == TDS_INVALID_TYPE) {
-		_csclient_msg(ctx, "cs_convert", 2, 1, 1, 16, "%d, %d", srcfmt->datatype, destfmt->datatype);
-		return CS_FAIL;
+		desttype = _ct_get_server_type(NULL, datatype);
+		if (desttype == TDS_INVALID_TYPE) {
+			_csclient_msg(ctx, "cs_convert", 2, 1, 1, 16, "%d, %d",
+				      srcfmt->datatype, destfmt->datatype);
+			return CS_FAIL;
+		}
 	}
 	destlen = destfmt->maxlength;
 	if (datatype == CS_VARCHAR_TYPE || datatype == CS_VARBINARY_TYPE) {
@@ -821,6 +825,14 @@ _cs_convert(CS_CONTEXT * ctx, const CS_DATAFMT_COMMON * srcfmt, CS_VOID * srcdat
 		*resultlen = src_len;
 		ret = CS_SUCCEED;
 		break;
+	case SYBMSTIME:
+	case SYBMSDATE:
+	case SYBMSDATETIME2:
+	case SYBMSDATETIMEOFFSET:
+		*resultlen = sizeof(TDS_DATETIMEALL);
+		memcpy(dest, &(cres.dta), *resultlen);
+		ret = CS_SUCCEED;
+		break;
 	case SYBCHAR:
 	case SYBVARCHAR:
 	case SYBTEXT:
@@ -887,7 +899,7 @@ CS_RETCODE
 cs_convert(CS_CONTEXT * ctx, CS_DATAFMT * srcfmt, CS_VOID * srcdata, CS_DATAFMT * destfmt, CS_VOID * destdata, CS_INT * resultlen)
 {
 	return _cs_convert(ctx, _ct_datafmt_common(ctx, srcfmt), srcdata,
-			   _ct_datafmt_common(ctx, destfmt), destdata, resultlen);
+			   _ct_datafmt_common(ctx, destfmt), destdata, resultlen, TDS_INVALID_TYPE);
 }
 
 CS_RETCODE
@@ -937,7 +949,7 @@ cs_dt_crack_v2(CS_CONTEXT * ctx, CS_INT datetype, CS_VOID * dateval, CS_DATEREC 
 	daterec->dateminute = dr.minute;
 	daterec->datesecond = dr.second;
 	daterec->datemsecond = dr.decimicrosecond / 10000u;
-	daterec->datetzone = 0;
+	daterec->datetzone = dr.timezone;
 	if (extended) {
 		daterec->datesecfrac = dr.decimicrosecond / 10u;
 		daterec->datesecprec = 1000000;
@@ -951,6 +963,8 @@ cs_dt_crack(CS_CONTEXT * ctx, CS_INT datetype, CS_VOID * dateval, CS_DATEREC * d
 {
 	tdsdump_log(TDS_DBG_FUNC, "cs_dt_crack(%p, %d, %p, %p)\n", ctx, datetype, dateval, daterec);
 
+	/* Avoid handling CS_BIGDATETIME_TYPE and CS_BIGTIME_TYPE as these
+	 * types requires a larger structure that would cause a buffer overflow. */
 	if (datetype != CS_BIGDATETIME_TYPE && datetype != CS_BIGTIME_TYPE)
 		return cs_dt_crack_v2(ctx, datetype, dateval, daterec);
 	return CS_FAIL;
@@ -1112,11 +1126,11 @@ cs_locale(CS_CONTEXT * ctx, CS_INT action, CS_LOCALE * locale, CS_INT type, CS_V
 	}
 	else if (action == CS_GET)
 	{
-		int tlen;
+		CS_INT tlen;
 
 		switch (type) {
 		case CS_SYB_CHARSET:
-			tlen = (locale->charset ? strlen(locale->charset) : 0) + 1;
+			tlen = (locale->charset ? (CS_INT) strlen(locale->charset) : 0) + 1;
 			if (buflen < tlen)
 			{
 				if (outlen)
@@ -1131,7 +1145,7 @@ cs_locale(CS_CONTEXT * ctx, CS_INT action, CS_LOCALE * locale, CS_INT type, CS_V
 			break;
 
 		case CS_SYB_LANG:
-			tlen = (locale->language ? strlen(locale->language) : 0) + 1;
+			tlen = (locale->language ? (CS_INT) strlen(locale->language) : 0) + 1;
 			if (buflen < tlen)
 			{
 				if (outlen)
@@ -1147,10 +1161,10 @@ cs_locale(CS_CONTEXT * ctx, CS_INT action, CS_LOCALE * locale, CS_INT type, CS_V
 
 		case CS_SYB_LANG_CHARSET:
 		{
-			int clen;
+			CS_INT clen;
 
-			tlen = (locale->language ? strlen(locale->language) : 0) + 1;
-			clen = (locale->charset ? strlen(locale->charset) : 0) + 1;
+			tlen = (locale->language ? (CS_INT) strlen(locale->language) : 0) + 1;
+			clen = (locale->charset ? (CS_INT) strlen(locale->charset) : 0) + 1;
 			
 			if (buflen < (tlen + clen))
 			{
@@ -1164,7 +1178,7 @@ cs_locale(CS_CONTEXT * ctx, CS_INT action, CS_LOCALE * locale, CS_INT type, CS_V
 				((char *)buffer)[0] = '\0';
 			strcat((char *)buffer, ".");
 			if (locale->charset) {
-				tlen = strlen((char *)buffer);
+				tlen = (CS_INT) strlen((char *)buffer);
 				strcpy((char *)buffer + tlen, locale->charset);
 			}
 			code = CS_SUCCEED;
@@ -1172,7 +1186,7 @@ cs_locale(CS_CONTEXT * ctx, CS_INT action, CS_LOCALE * locale, CS_INT type, CS_V
 		}
 
 		case CS_SYB_SORTORDER:
-			tlen = (locale->collate ? strlen(locale->collate) : 0) + 1;
+			tlen = (locale->collate ? (CS_INT) strlen(locale->collate) : 0) + 1;
 			if (buflen < tlen)
 			{
 				if (outlen)
@@ -1277,7 +1291,7 @@ cs_diag(CS_CONTEXT * ctx, CS_INT operation, CS_INT type, CS_INT idx, CS_VOID * b
 			}
 			ctx->cs_errhandletype = _CS_ERRHAND_INLINE;
 			ctx->cs_diag_msglimit = CS_NO_LIMIT;
-			ctx->_cslibmsg_cb = (CS_CSLIBMSG_FUNC) cs_diag_storemsg; 
+			ctx->cslibmsg_cb = (CS_CSLIBMSG_FUNC) cs_diag_storemsg;
 			break;
 		case CS_MSGLIMIT:
 			if ( ctx->cs_errhandletype != _CS_ERRHAND_INLINE) {
@@ -1504,18 +1518,25 @@ cs_diag_countmsg(CS_CONTEXT *context, CS_INT *count)
 }
 
 /**
- * Try to convert to a type we can handle
+ * Try to convert to a type we can handle.
+ * Used before calling _cs_convert to handle TDS types that do not have a
+ * corresponding CS_xxx_TYPE.
+ * @param ctx             Library context, used for conversion, can be NULL.
+ * @param curcol          Column with data to convert.
+ * @param convert_buffer  Buffer to store conversion, can be NULL.
+ * @param p_src           Pointer to pointer to source data, can be NULL.
+ * @return Converted type or CS_ILLEGAL_TYPE.
  */
 int
 _cs_convert_not_client(CS_CONTEXT *ctx, const TDSCOLUMN *curcol, CONV_RESULT *convert_buffer, unsigned char **p_src)
 {
 	int ct_type;
-	TDS_SERVER_TYPE desttype, type = curcol->column_type;
+	TDS_SERVER_TYPE desttype, srctype = curcol->column_type;
 
-	if (type == SYBVARIANT)
-		type = ((const TDSVARIANT *) curcol->column_data)->type;
+	if (srctype == SYBVARIANT)
+		srctype = ((const TDSVARIANT *) curcol->column_data)->type;
 
-	switch (type) {
+	switch (srctype) {
 	case SYBMSDATE:
 		desttype = SYBDATE;
 		ct_type = CS_DATE_TYPE;
@@ -1534,7 +1555,7 @@ _cs_convert_not_client(CS_CONTEXT *ctx, const TDSCOLUMN *curcol, CONV_RESULT *co
 	}
 
 	if (convert_buffer) {
-		int len = tds_convert(ctx->tds_ctx, type, *p_src,
+		int len = tds_convert(ctx->tds_ctx, srctype, *p_src,
 				      curcol->column_cur_size, desttype, convert_buffer);
 		if (len < 0)
 			return CS_ILLEGAL_TYPE; /* TODO _csclient_msg ?? */

@@ -1,7 +1,6 @@
 #include "common.h"
 
-int
-main(void)
+TEST_MAIN()
 {
 	CS_CONTEXT *ctx;
 	CS_CONNECTION *conn;
@@ -57,9 +56,9 @@ main(void)
 
 	check_call(ct_cursor, (cmd, CS_CURSOR_DECLARE, name, CS_NULLTERM, text, CS_NULLTERM, CS_UNUSED));
 
-	check_call(ct_cursor, (cmd, CS_CURSOR_ROWS, name, CS_NULLTERM, NULL, CS_UNUSED, (CS_INT) 1));
+	check_call(ct_cursor, (cmd, CS_CURSOR_ROWS, NULL, CS_UNUSED, NULL, CS_UNUSED, (CS_INT) 1));
 
-	check_call(ct_cursor, (cmd, CS_CURSOR_OPEN, name, CS_NULLTERM, text, CS_NULLTERM, CS_UNUSED));
+	check_call(ct_cursor, (cmd, CS_CURSOR_OPEN, NULL, CS_UNUSED, NULL, CS_UNUSED, CS_UNUSED));
 
 	check_call(ct_send, (cmd));
 
@@ -118,9 +117,9 @@ main(void)
 
 	check_call(ct_cursor, (cmd2, CS_CURSOR_DECLARE, name2, CS_NULLTERM, text, CS_NULLTERM, CS_UNUSED));
 
-	check_call(ct_cursor, (cmd2, CS_CURSOR_ROWS, name2, CS_NULLTERM, NULL, CS_UNUSED, (CS_INT) 1));
+	check_call(ct_cursor, (cmd2, CS_CURSOR_ROWS, NULL, CS_UNUSED, NULL, CS_UNUSED, (CS_INT) 1));
 
-	check_call(ct_cursor, (cmd2, CS_CURSOR_OPEN, name2, CS_NULLTERM, text, CS_NULLTERM, CS_UNUSED));
+	check_call(ct_cursor, (cmd2, CS_CURSOR_OPEN, NULL, CS_UNUSED, NULL, CS_UNUSED, CS_UNUSED));
 
 	check_call(ct_send, (cmd2));
 
@@ -199,7 +198,7 @@ main(void)
 		printf("closing first cursor on connection\n");
 	}
 
-	check_call(ct_cursor, (cmd, CS_CURSOR_CLOSE, name, CS_NULLTERM, NULL, CS_UNUSED, CS_UNUSED));
+	check_call(ct_cursor, (cmd, CS_CURSOR_CLOSE, NULL, CS_UNUSED, NULL, CS_UNUSED, CS_UNUSED));
 
 	check_call(ct_send, (cmd));
 
@@ -214,7 +213,7 @@ main(void)
 		return 1;
 	}
 
-	check_call(ct_cursor, (cmd, CS_CURSOR_DEALLOC, name, CS_NULLTERM, NULL, CS_UNUSED, CS_UNUSED));
+	check_call(ct_cursor, (cmd, CS_CURSOR_DEALLOC, NULL, CS_UNUSED, NULL, CS_UNUSED, CS_UNUSED));
 
 	check_call(ct_send, (cmd));
 
@@ -233,7 +232,7 @@ main(void)
 		printf("closing second cursor on connection\n");
 	}
 
-	check_call(ct_cursor, (cmd2, CS_CURSOR_CLOSE, name2, CS_NULLTERM, NULL, CS_UNUSED, CS_UNUSED));
+	check_call(ct_cursor, (cmd2, CS_CURSOR_CLOSE, NULL, CS_UNUSED, NULL, CS_UNUSED, CS_UNUSED));
 
 	check_call(ct_send, (cmd2));
 
@@ -248,7 +247,7 @@ main(void)
 		return 1;
 	}
 
-	check_call(ct_cursor, (cmd2, CS_CURSOR_DEALLOC, name2, CS_NULLTERM, NULL, CS_UNUSED, CS_UNUSED));
+	check_call(ct_cursor, (cmd2, CS_CURSOR_DEALLOC, NULL, CS_UNUSED, NULL, CS_UNUSED, CS_UNUSED));
 
 	check_call(ct_send, (cmd2));
 

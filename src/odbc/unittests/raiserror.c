@@ -26,12 +26,6 @@ static SQLSMALLINT ReturnCode;
 static char OutString[OUTSTRING_LEN];
 static int g_nocount, g_second_select;
 
-#ifdef TDS_NO_DM
-static const int tds_no_dm = 1;
-#else
-static const int tds_no_dm = 0;
-#endif
-
 static void
 TestResult(SQLRETURN result0, int level, const char *func)
 {
@@ -108,6 +102,11 @@ CheckReturnCode(SQLRETURN result, SQLSMALLINT expected, int line)
 
 #define CheckReturnCode(res, exp) CheckReturnCode(res, exp, __LINE__)
 
+static const char yes_no[][4] = {
+	"no", "yes"
+};
+#define yes_no(cond) yes_no[!!(cond)]
+
 static void
 Test(int level)
 {
@@ -120,7 +119,7 @@ Test(int level)
 	char sql[80];
 
 	printf("ODBC %d nocount %s select %s level %d\n", odbc_use_version3 ? 3 : 2,
-	       g_nocount ? "yes" : "no", g_second_select ? "yes" : "no", level);
+	       yes_no(g_nocount), yes_no(g_second_select), level);
 
 	ReturnCode = INVALID_RETURN;
 	memset(&OutString, 0, sizeof(OutString));
@@ -132,10 +131,8 @@ Test(int level)
 	TestResult(result, level, "SQLExecDirect");
 
 	/* test with SQLPrepare/SQLExecute */
-	if (!SQL_SUCCEEDED(SQLPrepare(odbc_stmt, T(SP_TEXT), strlen(SP_TEXT)))) {
-		fprintf(stderr, "SQLPrepare failure!\n");
-		exit(1);
-	}
+	printf("Preparing: %s\n", SP_TEXT);
+	CHKPrepare(T(SP_TEXT), (SQLINTEGER) strlen(SP_TEXT), "SI");
 
 	SQLBindParameter(odbc_stmt, 1, SQL_PARAM_OUTPUT, SQL_C_SSHORT, SQL_INTEGER, 0, 0, &ReturnCode, 0, &cbReturnCode);
 	SQLBindParameter(odbc_stmt, 2, SQL_PARAM_INPUT, SQL_C_SSHORT, SQL_INTEGER, 0, 0, &InParam, 0, &cbInParam);
@@ -277,8 +274,7 @@ Test2(int nocount, int second_select)
 	odbc_command("DROP PROC #tmp1");
 }
 
-int
-main(void)
+TEST_MAIN()
 {
 	odbc_connect();
 
@@ -288,7 +284,7 @@ main(void)
 
 	odbc_disconnect();
 
-	odbc_use_version3 = 1;
+	odbc_use_version3 = true;
 
 	odbc_connect();
 

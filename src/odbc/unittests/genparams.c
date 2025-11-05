@@ -18,12 +18,6 @@
  * Also we have to check normal char and wide char
  */
 
-#ifdef TDS_NO_DM
-static const char tds_no_dm = 1;
-#else
-static const char tds_no_dm = 0;
-#endif
-
 static char precision = 18;
 static char exec_direct = 0;
 static char prepare_before = 0;
@@ -411,6 +405,7 @@ AllTests(void)
 	TestInput(SQL_C_DOUBLE, "REAL", SQL_DOUBLE, "FLOAT", "-1234.25");
 
 	TestInput(SQL_C_UTINYINT, "TINYINT", SQL_TINYINT, "TINYINT", "231");
+	TestInput(SQL_C_STINYINT, "SMALLINT", SQL_SMALLINT, "SMALLINT", "-123");
 
 	TestInput(SQL_C_NUMERIC, "NUMERIC(20,3)", SQL_NUMERIC, "NUMERIC(20,3)", "765432.2 -> 765432");
 	TestInput(SQL_C_NUMERIC, "NUMERIC(20,3)", SQL_VARCHAR, "VARCHAR(20)", "578246.234 -> 578246");
@@ -516,10 +511,9 @@ AllTests(void)
 	}
 }
 
-int
-main(void)
+TEST_MAIN()
 {
-	odbc_use_version3 = 1;
+	odbc_use_version3 = true;
 	odbc_conn_additional_params = "ClientCharset=ISO-8859-1;";
 
 	odbc_connect();
